@@ -1,0 +1,93 @@
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use crate::models::{Car, Claims};
+
+pub async fn toggle_favorite(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let car_id = path.into_inner();
+
+    // Check if already favorited
+    let existing = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM favorites WHERE user_id = $1 AND car_id = $2)",
+    )
+    .bind(claims.sub)
+    .bind(car_id)
+    .fetch_one(pool.get_ref())
+    .await
+    .unwrap_or(false);
+
+    if existing {
+        let _ = sqlx::query("DELETE FROM favorites WHERE user_id = $1 AND car_id = $2")
+            .bind(claims.sub)
+            .bind(car_id)
+            .execute(pool.get_ref())
+            .await;
+        HttpResponse::Ok().json(serde_json::json!({"favorited": false}))
+    } else {
+        let _ = sqlx::query(
+            "INSERT INTO favorites (id, user_id, car_id, created_at) VALUES ($1, $2, $3, NOW())",
+        )
+        .bind(Uuid::new_v4())
+        .bind(claims.sub)
+        .bind(car_id)
+        .execute(pool.get_ref())
+        .await;
+        HttpResponse::Ok().json(serde_json::json!({"favorited": true}))
+    }
+}
+
+pub async fn get_favorites(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let result = sqlx::query_as::<_, Car>(
+        r#"SELECT c.* FROM cars c
+        INNER JOIN favorites f ON f.car_id = c.id
+        WHERE f.user_id = $1
+        ORDER BY f.created_at DESC"#,
+    )
+    .bind(claims.sub)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(cars) => HttpResponse::Ok().json(cars),
+        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn check_favorite(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let car_id = path.into_inner();
+
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM favorites WHERE user_id = $1 AND car_id = $2)",
+    )
+    .bind(claims.sub)
+    .bind(car_id)
+    .fetch_one(pool.get_ref())
+    .await
+    .unwrap_or(false);
+
+    HttpResponse::Ok().json(serde_json::json!({"favorited": exists}))
+}
