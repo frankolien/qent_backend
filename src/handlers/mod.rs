@@ -9,3 +9,4 @@ pub mod favorites;
 pub mod notifications;
 pub mod cards;
 pub mod verification;
+pub mod partner;

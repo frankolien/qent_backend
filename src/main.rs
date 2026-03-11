@@ -118,6 +118,11 @@ async fn main() -> std::io::Result<()> {
                             .route("/notifications", web::get().to(handlers::notifications::get_notifications))
                             .route("/notifications/{id}/read", web::post().to(handlers::notifications::mark_read))
                             .route("/notifications/read-all", web::post().to(handlers::notifications::mark_all_read))
+                            // Partnership
+                            .route("/partner/apply", web::post().to(handlers::partner::apply))
+                            .route("/partner/application", web::get().to(handlers::partner::get_application))
+                            .route("/partner/dashboard", web::get().to(handlers::partner::dashboard))
+                            .route("/partner/activate-car", web::post().to(handlers::partner::activate_car))
                             // Admin
                             .route("/admin/users", web::get().to(handlers::admin::list_users))
                             .route("/admin/users/{id}/verify", web::post().to(handlers::admin::verify_user))

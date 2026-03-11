@@ -7,6 +7,7 @@ pub mod protection_plan;
 pub mod notification;
 pub mod favorite;
 pub mod card;
+pub mod partner;
 
 pub use user::*;
 pub use car::*;
@@ -17,3 +18,4 @@ pub use protection_plan::*;
 pub use notification::*;
 pub use favorite::*;
 pub use card::*;
+pub use partner::*;

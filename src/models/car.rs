@@ -82,6 +82,9 @@ pub struct CarSearchQuery {
     pub model: Option<String>,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
+    pub color: Option<String>,
+    pub seats: Option<i32>,
+    pub fuel_type: Option<String>,
     pub page: Option<i64>,
     pub per_page: Option<i64>,
 }

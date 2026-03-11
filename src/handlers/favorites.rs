@@ -53,8 +53,19 @@ pub async fn get_favorites(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     };
 
     let result = sqlx::query_as::<_, Car>(
-        r#"SELECT c.* FROM cars c
+        r#"SELECT c.*,
+            COALESCE(rs.avg_rating, 0.0) as rating,
+            COALESCE(rs.trip_count, 0) as trip_count
+        FROM cars c
         INNER JOIN favorites f ON f.car_id = c.id
+        LEFT JOIN (
+            SELECT b.car_id,
+                   AVG(r.rating)::double precision as avg_rating,
+                   COUNT(DISTINCT b.id) as trip_count
+            FROM reviews r
+            JOIN bookings b ON r.booking_id = b.id
+            GROUP BY b.car_id
+        ) rs ON rs.car_id = c.id
         WHERE f.user_id = $1
         ORDER BY f.created_at DESC"#,
     )

@@ -124,8 +124,10 @@ pub async fn search_cars(
         AND ($5::text IS NULL OR LOWER(c.model) = LOWER($5))
         AND ($6::date IS NULL OR c.available_from IS NULL OR c.available_from <= $6)
         AND ($7::date IS NULL OR c.available_to IS NULL OR c.available_to >= $7)
-        ORDER BY c.created_at DESC
-        LIMIT $8 OFFSET $9"#,
+        AND ($8::text IS NULL OR LOWER(c.color) = LOWER($8))
+        AND ($9::integer IS NULL OR c.seats = $9)
+        ORDER BY COALESCE(rs.avg_rating, 0.0) DESC, c.created_at DESC
+        LIMIT $10 OFFSET $11"#,
     )
     .bind(&query.location)
     .bind(query.min_price)
@@ -134,6 +136,8 @@ pub async fn search_cars(
     .bind(&query.model)
     .bind(query.start_date)
     .bind(query.end_date)
+    .bind(&query.color)
+    .bind(query.seats)
     .bind(per_page)
     .bind(offset)
     .fetch_all(pool.get_ref())
@@ -191,13 +195,13 @@ pub async fn update_car(
     let car_id = path.into_inner();
 
     // Verify ownership
-    let car = sqlx::query_as::<_, Car>("SELECT * FROM cars WHERE id = $1")
+    let car = sqlx::query_scalar::<_, Uuid>("SELECT host_id FROM cars WHERE id = $1")
         .bind(car_id)
         .fetch_optional(pool.get_ref())
         .await;
 
     match &car {
-        Ok(Some(c)) if c.host_id != claims.sub && claims.role != UserRole::Admin => {
+        Ok(Some(host_id)) if *host_id != claims.sub && claims.role != UserRole::Admin => {
             return HttpResponse::Forbidden().json(serde_json::json!({"error": "Not your car"}));
         }
         Ok(None) => {
