@@ -8,6 +8,7 @@ use crate::models::{
     Booking, BookingStatus, Claims, InitiatePaymentRequest, Payment, PaymentInitResponse,
     PaymentStatus, PaystackWebhookEvent, TransactionType, WalletTransaction,
 };
+use crate::services::email::EmailService;
 use crate::services::AppConfig;
 
 pub async fn initiate_payment(
@@ -22,7 +23,7 @@ pub async fn initiate_payment(
     };
 
     let booking = match sqlx::query_as::<_, Booking>(
-        "SELECT * FROM bookings WHERE id = $1 AND renter_id = $2 AND status = 'approved'",
+        "SELECT * FROM bookings WHERE id = $1 AND renter_id = $2 AND status IN ('pending', 'approved')",
     )
     .bind(body.booking_id)
     .bind(claims.sub)
@@ -147,6 +148,77 @@ pub async fn paystack_webhook(
             .bind(payment.booking_id)
             .execute(pool.get_ref())
             .await;
+
+            // Notify the host about the new confirmed booking
+            if let Ok(Some(booking)) = sqlx::query_as::<_, Booking>(
+                "SELECT * FROM bookings WHERE id = $1",
+            )
+            .bind(payment.booking_id)
+            .fetch_optional(pool.get_ref())
+            .await
+            {
+                // Get renter name for the notification
+                let renter_name = sqlx::query_scalar::<_, String>(
+                    "SELECT full_name FROM users WHERE id = $1",
+                )
+                .bind(payment.payer_id)
+                .fetch_one(pool.get_ref())
+                .await
+                .unwrap_or_else(|_| "Someone".to_string());
+
+                // Get car name
+                let car_name = sqlx::query_scalar::<_, String>(
+                    "SELECT CONCAT(make, ' ', model, ' ', year) FROM cars WHERE id = $1",
+                )
+                .bind(booking.car_id)
+                .fetch_one(pool.get_ref())
+                .await
+                .unwrap_or_else(|_| "your car".to_string());
+
+                let _ = sqlx::query(
+                    r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, data, created_at)
+                    VALUES ($1, $2, $3, $4, $5, false, $6, NOW())"#,
+                )
+                .bind(Uuid::new_v4())
+                .bind(booking.host_id)
+                .bind("New Booking Confirmed!")
+                .bind(format!("{} has booked your {} — payment confirmed.", renter_name, car_name))
+                .bind("booking_confirmed")
+                .bind(serde_json::json!({
+                    "booking_id": booking.id,
+                    "car_id": booking.car_id,
+                    "renter_id": payment.payer_id,
+                }))
+                .execute(pool.get_ref())
+                .await;
+
+                // Send booking confirmation email to the renter
+                let renter_email = sqlx::query_scalar::<_, String>(
+                    "SELECT email FROM users WHERE id = $1",
+                )
+                .bind(payment.payer_id)
+                .fetch_one(pool.get_ref())
+                .await
+                .unwrap_or_default();
+
+                if !renter_email.is_empty() {
+                    let email_service = EmailService::new(config.resend_api_key.clone());
+                    email_service.send_booking_confirmation(
+                        &renter_email,
+                        &renter_name,
+                        &car_name,
+                        &booking.id.to_string(),
+                        booking.start_date,
+                        booking.end_date,
+                        booking.total_days,
+                        booking.subtotal,
+                        booking.service_fee,
+                        booking.protection_fee,
+                        booking.total_amount,
+                        reference,
+                    ).await;
+                }
+            }
 
             // Auto-save card if authorization is reusable
             if let Some(auth) = &body.data.authorization {

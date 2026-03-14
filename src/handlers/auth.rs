@@ -7,7 +7,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::models::{
-    AuthResponse, Claims, SignInRequest, SignUpRequest, UpdateProfileRequest, UserPublic,
+    AuthResponse, Claims, SignInRequest, SignUpRequest, UpdateProfileRequest, User, UserPublic,
     VerificationStatus, VerifyIdentityRequest,
 };
 use crate::services::AppConfig;
@@ -157,6 +157,30 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRespo
 
     match user {
         Ok(Some(u)) => HttpResponse::Ok().json(UserPublic::from(u)),
+        Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "User not found"})),
+        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// Get any user's public profile by ID (for displaying names/photos in chat, car listings, etc.)
+pub async fn get_user_public(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
+    let user_id = path.into_inner();
+
+    let result = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await;
+
+    match result {
+        Ok(Some(u)) => {
+            let public = serde_json::json!({
+                "id": u.id,
+                "full_name": u.full_name,
+                "profile_photo_url": u.profile_photo_url,
+                "role": u.role,
+            });
+            HttpResponse::Ok().json(public)
+        }
         Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "User not found"})),
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
     }

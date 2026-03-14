@@ -10,3 +10,6 @@ pub mod notifications;
 pub mod cards;
 pub mod verification;
 pub mod partner;
+pub mod chat;
+pub mod dashboard;
+pub mod stories;

@@ -1,0 +1,420 @@
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
+use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use crate::models::Claims;
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ConversationResponse {
+    pub id: Uuid,
+    pub car_id: Uuid,
+    pub renter_id: Uuid,
+    pub host_id: Uuid,
+    pub last_message_text: String,
+    pub last_message_at: NaiveDateTime,
+    pub renter_unread_count: i32,
+    pub host_unread_count: i32,
+    pub status: String,
+    pub created_at: NaiveDateTime,
+    // Joined fields
+    pub other_user_name: String,
+    pub car_name: String,
+    pub car_photo: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct MessageResponse {
+    pub id: Uuid,
+    pub conversation_id: Uuid,
+    pub sender_id: Uuid,
+    pub content: String,
+    pub message_type: String,
+    pub reply_to_id: Option<Uuid>,
+    pub is_read: bool,
+    pub created_at: NaiveDateTime,
+    // Joined
+    pub sender_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateConversationRequest {
+    pub car_id: Uuid,
+    pub host_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendMessageRequest {
+    pub content: String,
+    pub message_type: String,
+    pub reply_to_id: Option<Uuid>,
+}
+
+pub async fn get_or_create_conversation(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<CreateConversationRequest>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let renter_id = claims.sub;
+    let car_id = body.car_id;
+    let host_id = body.host_id;
+
+    // Prevent chatting with yourself
+    if renter_id == host_id {
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "You cannot start a conversation with yourself"}));
+    }
+
+    // Try to find existing conversation
+    let existing = sqlx::query_as::<_, ConversationResponse>(
+        r#"SELECT
+            conv.id, conv.car_id, conv.renter_id, conv.host_id,
+            conv.last_message_text, conv.last_message_at,
+            conv.renter_unread_count, conv.host_unread_count,
+            conv.status, conv.created_at,
+            u.full_name AS other_user_name,
+            CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
+            COALESCE(c.photos[1], '') AS car_photo
+        FROM conversations conv
+        JOIN users u ON u.id = conv.host_id
+        JOIN cars c ON c.id = conv.car_id
+        WHERE conv.car_id = $1 AND conv.renter_id = $2"#,
+    )
+    .bind(car_id)
+    .bind(renter_id)
+    .fetch_optional(pool.get_ref())
+    .await;
+
+    match existing {
+        Ok(Some(conversation)) => {
+            return HttpResponse::Ok().json(conversation);
+        }
+        Ok(None) => {}
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}));
+        }
+    }
+
+    // Create new conversation
+    let conv_id = Uuid::new_v4();
+    let insert_result = sqlx::query(
+        r#"INSERT INTO conversations
+            (id, car_id, renter_id, host_id, last_message_text, last_message_at,
+             renter_unread_count, host_unread_count, status, created_at)
+        VALUES ($1, $2, $3, $4, '', NOW(), 0, 0, 'active', NOW())"#,
+    )
+    .bind(conv_id)
+    .bind(car_id)
+    .bind(renter_id)
+    .bind(host_id)
+    .execute(pool.get_ref())
+    .await;
+
+    if let Err(e) = insert_result {
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()}));
+    }
+
+    // Fetch the newly created conversation with joined data
+    let result = sqlx::query_as::<_, ConversationResponse>(
+        r#"SELECT
+            conv.id, conv.car_id, conv.renter_id, conv.host_id,
+            conv.last_message_text, conv.last_message_at,
+            conv.renter_unread_count, conv.host_unread_count,
+            conv.status, conv.created_at,
+            u.full_name AS other_user_name,
+            CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
+            COALESCE(c.photos[1], '') AS car_photo
+        FROM conversations conv
+        JOIN users u ON u.id = conv.host_id
+        JOIN cars c ON c.id = conv.car_id
+        WHERE conv.id = $1"#,
+    )
+    .bind(conv_id)
+    .fetch_one(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(conversation) => HttpResponse::Created().json(conversation),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn get_conversations(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let user_id = claims.sub;
+
+    let result = sqlx::query_as::<_, ConversationResponse>(
+        r#"SELECT
+            conv.id, conv.car_id, conv.renter_id, conv.host_id,
+            conv.last_message_text, conv.last_message_at,
+            conv.renter_unread_count, conv.host_unread_count,
+            conv.status, conv.created_at,
+            CASE
+                WHEN conv.renter_id = $1 THEN host_u.full_name
+                ELSE renter_u.full_name
+            END AS other_user_name,
+            CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
+            COALESCE(c.photos[1], '') AS car_photo
+        FROM conversations conv
+        JOIN users renter_u ON renter_u.id = conv.renter_id
+        JOIN users host_u ON host_u.id = conv.host_id
+        JOIN cars c ON c.id = conv.car_id
+        WHERE conv.renter_id = $1 OR conv.host_id = $1
+        ORDER BY conv.last_message_at DESC"#,
+    )
+    .bind(user_id)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(conversations) => HttpResponse::Ok().json(conversations),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn get_messages(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let conversation_id = path.into_inner();
+    let user_id = claims.sub;
+
+    // Verify user is a participant
+    let is_participant = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND (renter_id = $2 OR host_id = $2))",
+    )
+    .bind(conversation_id)
+    .bind(user_id)
+    .fetch_one(pool.get_ref())
+    .await
+    .unwrap_or(false);
+
+    if !is_participant {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Not a participant in this conversation"}));
+    }
+
+    // Mark messages as read by resetting unread count for current user
+    let _ = sqlx::query(
+        r#"UPDATE conversations SET
+            renter_unread_count = CASE WHEN renter_id = $2 THEN 0 ELSE renter_unread_count END,
+            host_unread_count = CASE WHEN host_id = $2 THEN 0 ELSE host_unread_count END
+        WHERE id = $1"#,
+    )
+    .bind(conversation_id)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    // Also mark individual messages as read
+    let _ = sqlx::query(
+        "UPDATE messages SET is_read = true WHERE conversation_id = $1 AND sender_id != $2 AND is_read = false",
+    )
+    .bind(conversation_id)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    let result = sqlx::query_as::<_, MessageResponse>(
+        r#"SELECT
+            m.id, m.conversation_id, m.sender_id, m.content,
+            m.message_type, m.reply_to_id, m.is_read, m.created_at,
+            u.full_name AS sender_name
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        WHERE m.conversation_id = $1
+        ORDER BY m.created_at ASC"#,
+    )
+    .bind(conversation_id)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(messages) => HttpResponse::Ok().json(messages),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn send_message(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+    body: web::Json<SendMessageRequest>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let conversation_id = path.into_inner();
+    let user_id = claims.sub;
+
+    // Verify user is a participant
+    let is_participant = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND (renter_id = $2 OR host_id = $2))",
+    )
+    .bind(conversation_id)
+    .bind(user_id)
+    .fetch_one(pool.get_ref())
+    .await
+    .unwrap_or(false);
+
+    if !is_participant {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Not a participant in this conversation"}));
+    }
+
+    let message_id = Uuid::new_v4();
+
+    // Insert the message
+    let insert_result = sqlx::query(
+        r#"INSERT INTO messages
+            (id, conversation_id, sender_id, content, message_type, reply_to_id, is_read, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, false, NOW())"#,
+    )
+    .bind(message_id)
+    .bind(conversation_id)
+    .bind(user_id)
+    .bind(&body.content)
+    .bind(&body.message_type)
+    .bind(body.reply_to_id)
+    .execute(pool.get_ref())
+    .await;
+
+    if let Err(e) = insert_result {
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()}));
+    }
+
+    // Update conversation: last message text, timestamp, and increment OTHER user's unread count
+    let _ = sqlx::query(
+        r#"UPDATE conversations SET
+            last_message_text = $2,
+            last_message_at = NOW(),
+            renter_unread_count = CASE WHEN renter_id != $3 THEN renter_unread_count + 1 ELSE renter_unread_count END,
+            host_unread_count = CASE WHEN host_id != $3 THEN host_unread_count + 1 ELSE host_unread_count END
+        WHERE id = $1"#,
+    )
+    .bind(conversation_id)
+    .bind(&body.content)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    // Fetch and return the new message
+    let result = sqlx::query_as::<_, MessageResponse>(
+        r#"SELECT
+            m.id, m.conversation_id, m.sender_id, m.content,
+            m.message_type, m.reply_to_id, m.is_read, m.created_at,
+            u.full_name AS sender_name
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        WHERE m.id = $1"#,
+    )
+    .bind(message_id)
+    .fetch_one(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(message) => HttpResponse::Created().json(message),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// DELETE /api/chat/conversations/{id} - Delete a conversation and its messages
+pub async fn delete_conversation(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let conversation_id = path.into_inner();
+    let user_id = claims.sub;
+
+    // Verify user is a participant
+    let is_participant = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND (renter_id = $2 OR host_id = $2))",
+    )
+    .bind(conversation_id)
+    .bind(user_id)
+    .fetch_one(pool.get_ref())
+    .await
+    .unwrap_or(false);
+
+    if !is_participant {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Not a participant in this conversation"}));
+    }
+
+    // Delete messages first (FK constraint), then conversation
+    let _ = sqlx::query("DELETE FROM messages WHERE conversation_id = $1")
+        .bind(conversation_id)
+        .execute(pool.get_ref())
+        .await;
+
+    let result = sqlx::query("DELETE FROM conversations WHERE id = $1")
+        .bind(conversation_id)
+        .execute(pool.get_ref())
+        .await;
+
+    match result {
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"message": "Conversation deleted"})),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn mark_read(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        
+    };
+
+    let conversation_id = path.into_inner();
+    let user_id = claims.sub;
+
+    // Reset unread count for the current user
+    let _ = sqlx::query(
+        r#"UPDATE conversations SET
+            renter_unread_count = CASE WHEN renter_id = $2 THEN 0 ELSE renter_unread_count END,
+            host_unread_count = CASE WHEN host_id = $2 THEN 0 ELSE host_unread_count END
+        WHERE id = $1 AND (renter_id = $2 OR host_id = $2)"#,
+    )
+    .bind(conversation_id)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    HttpResponse::Ok().json(serde_json::json!({"message": "Marked as read"}))
+}

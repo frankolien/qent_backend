@@ -36,8 +36,10 @@ pub async fn create_car(
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
             RETURNING *
         )
-        SELECT inserted.*, 0.0::double precision as rating, 0::bigint as trip_count
-        FROM inserted"#,
+        SELECT inserted.*, 0.0::double precision as rating, 0::bigint as trip_count,
+            u.full_name as host_name
+        FROM inserted
+        LEFT JOIN users u ON u.id = inserted.host_id"#,
     )
     .bind(id)
     .bind(claims.sub)
@@ -72,7 +74,8 @@ pub async fn get_car(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResp
     let result = sqlx::query_as::<_, Car>(
         r#"SELECT c.*,
             COALESCE(rs.avg_rating, 0.0) as rating,
-            COALESCE(rs.trip_count, 0) as trip_count
+            COALESCE(rs.trip_count, 0) as trip_count,
+            u.full_name as host_name
         FROM cars c
         LEFT JOIN (
             SELECT b.car_id,
@@ -82,6 +85,7 @@ pub async fn get_car(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResp
             JOIN bookings b ON r.booking_id = b.id
             GROUP BY b.car_id
         ) rs ON rs.car_id = c.id
+        LEFT JOIN users u ON u.id = c.host_id
         WHERE c.id = $1"#,
     )
         .bind(car_id)
@@ -106,7 +110,8 @@ pub async fn search_cars(
     let result = sqlx::query_as::<_, Car>(
         r#"SELECT c.*,
             COALESCE(rs.avg_rating, 0.0) as rating,
-            COALESCE(rs.trip_count, 0) as trip_count
+            COALESCE(rs.trip_count, 0) as trip_count,
+            u.full_name as host_name
         FROM cars c
         LEFT JOIN (
             SELECT b.car_id,
@@ -116,6 +121,7 @@ pub async fn search_cars(
             JOIN bookings b ON r.booking_id = b.id
             GROUP BY b.car_id
         ) rs ON rs.car_id = c.id
+        LEFT JOIN users u ON u.id = c.host_id
         WHERE c.status = 'active'
         AND ($1::text IS NULL OR LOWER(c.location) LIKE LOWER('%' || $1 || '%'))
         AND ($2::double precision IS NULL OR c.price_per_day >= $2)
@@ -158,7 +164,8 @@ pub async fn get_host_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     let result = sqlx::query_as::<_, Car>(
         r#"SELECT c.*,
             COALESCE(rs.avg_rating, 0.0) as rating,
-            COALESCE(rs.trip_count, 0) as trip_count
+            COALESCE(rs.trip_count, 0) as trip_count,
+            u.full_name as host_name
         FROM cars c
         LEFT JOIN (
             SELECT b.car_id,
@@ -168,6 +175,7 @@ pub async fn get_host_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
             JOIN bookings b ON r.booking_id = b.id
             GROUP BY b.car_id
         ) rs ON rs.car_id = c.id
+        LEFT JOIN users u ON u.id = c.host_id
         WHERE c.host_id = $1
         ORDER BY c.created_at DESC"#,
     )
@@ -229,10 +237,11 @@ pub async fn update_car(
             WHERE id = $10
             RETURNING *
         )
-        SELECT u.*,
+        SELECT updated.*,
             COALESCE(rs.avg_rating, 0.0) as rating,
-            COALESCE(rs.trip_count, 0) as trip_count
-        FROM updated u
+            COALESCE(rs.trip_count, 0) as trip_count,
+            usr.full_name as host_name
+        FROM updated
         LEFT JOIN (
             SELECT b.car_id,
                    AVG(r.rating)::double precision as avg_rating,
@@ -240,7 +249,8 @@ pub async fn update_car(
             FROM reviews r
             JOIN bookings b ON r.booking_id = b.id
             GROUP BY b.car_id
-        ) rs ON rs.car_id = u.id"#,
+        ) rs ON rs.car_id = updated.id
+        LEFT JOIN users usr ON usr.id = updated.host_id"#,
     )
     .bind(&body.description)
     .bind(body.price_per_day)

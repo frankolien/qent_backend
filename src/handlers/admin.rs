@@ -40,7 +40,12 @@ pub async fn list_all_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
         return resp;
     }
 
-    let result = sqlx::query_as::<_, Car>("SELECT * FROM cars ORDER BY created_at DESC")
+    let result = sqlx::query_as::<_, Car>(
+        r#"SELECT c.*, u.full_name as host_name
+        FROM cars c
+        LEFT JOIN users u ON u.id = c.host_id
+        ORDER BY c.created_at DESC"#,
+    )
         .fetch_all(pool.get_ref())
         .await;
 

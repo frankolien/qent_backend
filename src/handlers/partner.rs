@@ -83,8 +83,10 @@ pub async fn apply(
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 5, NOW(), NOW())
             RETURNING *
         )
-        SELECT inserted.*, 0.0::double precision as rating, 0::bigint as trip_count
-        FROM inserted"#,
+        SELECT inserted.*, 0.0::double precision as rating, 0::bigint as trip_count,
+            u.full_name as host_name
+        FROM inserted
+        LEFT JOIN users u ON u.id = inserted.host_id"#,
     )
     .bind(car_id)
     .bind(claims.sub)

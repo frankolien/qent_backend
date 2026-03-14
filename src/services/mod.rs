@@ -1,3 +1,5 @@
+pub mod email;
+
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]

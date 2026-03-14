@@ -18,7 +18,23 @@ pub async fn create_booking(
     };
 
     // Fetch car
-    let car = match sqlx::query_as::<_, Car>("SELECT * FROM cars WHERE id = $1 AND status = 'active'")
+    let car = match sqlx::query_as::<_, Car>(
+        r#"SELECT c.*,
+            COALESCE(rs.avg_rating, 0.0) as rating,
+            COALESCE(rs.trip_count, 0) as trip_count,
+            u.full_name as host_name
+        FROM cars c
+        LEFT JOIN users u ON u.id = c.host_id
+        LEFT JOIN (
+            SELECT b.car_id,
+                   AVG(r.rating)::double precision as avg_rating,
+                   COUNT(DISTINCT b.id) as trip_count
+            FROM bookings b
+            LEFT JOIN reviews r ON r.booking_id = b.id
+            GROUP BY b.car_id
+        ) rs ON rs.car_id = c.id
+        WHERE c.id = $1 AND c.status = 'active'"#,
+    )
         .bind(body.car_id)
         .fetch_optional(pool.get_ref())
         .await

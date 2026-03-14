@@ -70,9 +70,11 @@ async fn main() -> std::io::Result<()> {
                     // Cars - public search
                     .route("/cars/search", web::get().to(handlers::cars::search_cars))
                     .route("/cars/{id}", web::get().to(handlers::cars::get_car))
+                    .route("/cars/{id}/view", web::post().to(handlers::dashboard::increment_view))
                     // Protection plans - public
                     .route("/protection-plans", web::get().to(handlers::protection_plans::list_plans))
                     // Reviews - public
+                    .route("/users/{id}", web::get().to(handlers::auth::get_user_public))
                     .route("/users/{id}/reviews", web::get().to(handlers::reviews::get_user_reviews))
                     .route("/users/{id}/rating", web::get().to(handlers::reviews::get_user_rating))
                     // Email verification - no auth (pre-signup)
@@ -93,6 +95,9 @@ async fn main() -> std::io::Result<()> {
                             .route("/cars/my-listings", web::get().to(handlers::cars::get_host_cars))
                             .route("/cars/{id}", web::put().to(handlers::cars::update_car))
                             .route("/cars/{id}/deactivate", web::post().to(handlers::cars::deactivate_car))
+                            // Host Dashboard
+                            .route("/dashboard/stats", web::get().to(handlers::dashboard::get_host_stats))
+                            .route("/dashboard/listings", web::get().to(handlers::dashboard::get_host_listings))
                             // Bookings
                             .route("/bookings", web::post().to(handlers::bookings::create_booking))
                             .route("/bookings/mine", web::get().to(handlers::bookings::get_my_bookings))
@@ -123,6 +128,17 @@ async fn main() -> std::io::Result<()> {
                             .route("/partner/application", web::get().to(handlers::partner::get_application))
                             .route("/partner/dashboard", web::get().to(handlers::partner::dashboard))
                             .route("/partner/activate-car", web::post().to(handlers::partner::activate_car))
+                            // Stories
+                            .route("/stories", web::get().to(handlers::stories::get_stories))
+                            .route("/stories", web::post().to(handlers::stories::create_story))
+                            .route("/stories/{id}", web::delete().to(handlers::stories::delete_story))
+                            // Chat
+                            .route("/chat/conversations", web::post().to(handlers::chat::get_or_create_conversation))
+                            .route("/chat/conversations", web::get().to(handlers::chat::get_conversations))
+                            .route("/chat/conversations/{id}/messages", web::get().to(handlers::chat::get_messages))
+                            .route("/chat/conversations/{id}/messages", web::post().to(handlers::chat::send_message))
+                            .route("/chat/conversations/{id}/read", web::post().to(handlers::chat::mark_read))
+                            .route("/chat/conversations/{id}", web::delete().to(handlers::chat::delete_conversation))
                             // Admin
                             .route("/admin/users", web::get().to(handlers::admin::list_users))
                             .route("/admin/users/{id}/verify", web::post().to(handlers::admin::verify_user))

@@ -35,8 +35,10 @@ pub struct Car {
     pub trip_count: Option<i64>,
     pub available_from: Option<NaiveDate>,
     pub available_to: Option<NaiveDate>,
+    pub views_count: i32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub host_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate)]
