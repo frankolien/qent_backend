@@ -147,6 +147,88 @@ impl EmailService {
             Err(e) => log::error!("Failed to send email: {}", e),
         }
     }
+
+    pub async fn send_status_email(
+        &self,
+        to_email: &str,
+        recipient_name: &str,
+        car_name: &str,
+        status: &str,
+        message: &str,
+    ) {
+        if self.api_key.is_empty() {
+            log::warn!("Resend API key not set, skipping email");
+            return;
+        }
+
+        let (subject, badge_bg, badge_color, badge_text) = match status {
+            "approved" => (format!("Booking Approved - {}", car_name), "#E3F2FD", "#1565C0", "Approved"),
+            "rejected" => (format!("Booking Declined - {}", car_name), "#FFEBEE", "#C62828", "Declined"),
+            "cancelled" => (format!("Booking Cancelled - {}", car_name), "#FFEBEE", "#C62828", "Cancelled"),
+            "active" => (format!("Trip Started - {}", car_name), "#E8F5E9", "#2E7D32", "In Progress"),
+            "completed" => (format!("Trip Completed - {}", car_name), "#F5F5F5", "#616161", "Completed"),
+            _ => (format!("Booking Update - {}", car_name), "#F5F5F5", "#616161", status),
+        };
+
+        let html = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#f5f5f5">
+<div style="max-width:600px;margin:0 auto;background:#fff">
+  <div style="background:#1A1A1A;color:#fff;padding:32px;text-align:center">
+    <h1 style="margin:0;font-size:24px;font-weight:700">Qent</h1>
+  </div>
+  <div style="padding:32px">
+    <p style="font-size:18px;font-weight:600;margin-bottom:8px">Hi {name},</p>
+    <p style="color:#666;margin-bottom:24px">{message}</p>
+    <p><span style="display:inline-block;background:{badge_bg};color:{badge_color};padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600">{badge_text}</span></p>
+    <div style="background:#f9f9f9;border-radius:12px;padding:24px;margin:24px 0">
+      <p style="margin:0;font-weight:600">Car: {car_name}</p>
+    </div>
+    <p style="color:#666;font-size:14px">Open the Qent app for more details.</p>
+  </div>
+  <div style="text-align:center;padding:24px 32px;color:#999;font-size:12px;border-top:1px solid #eee">
+    <p>Qent - Car Rental Made Easy</p>
+    <p>This is an automated email. Please do not reply.</p>
+  </div>
+</div>
+</body>
+</html>"#,
+            name = recipient_name,
+            message = message,
+            badge_bg = badge_bg,
+            badge_color = badge_color,
+            badge_text = badge_text,
+            car_name = car_name,
+        );
+
+        let client = reqwest::Client::new();
+        let result = client
+            .post("https://api.resend.com/emails")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&serde_json::json!({
+                "from": self.from_email,
+                "to": [to_email],
+                "subject": subject,
+                "html": html,
+            }))
+            .send()
+            .await;
+
+        match result {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    log::info!("Status email ({}) sent to {}", status, to_email);
+                } else {
+                    let s = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    log::error!("Resend API error {}: {}", s, body);
+                }
+            }
+            Err(e) => log::error!("Failed to send status email: {}", e),
+        }
+    }
 }
 
 fn format_naira(amount: f64) -> String {

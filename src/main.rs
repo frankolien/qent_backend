@@ -1,4 +1,5 @@
 use actix_cors::Cors;
+use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_web::{dev::ServiceRequest, middleware::Logger, web, App, Error, HttpServer};
 use actix_web::body::MessageBody;
 use actix_web::dev::ServiceResponse;
@@ -47,6 +48,21 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("Qent API starting on {}", bind_addr);
 
+    // Rate limiter configs
+    // Auth: 10 requests per minute per IP
+    let auth_rate_limit = GovernorConfigBuilder::default()
+        .seconds_per_request(6)
+        .burst_size(10)
+        .finish()
+        .unwrap();
+
+    // Payments: 5 requests per minute per IP
+    let payment_rate_limit = GovernorConfigBuilder::default()
+        .seconds_per_request(12)
+        .burst_size(5)
+        .finish()
+        .unwrap();
+
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000")
@@ -64,9 +80,15 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(config.clone()))
             .service(
                 web::scope("/api")
-                    // Auth - public
-                    .route("/auth/signup", web::post().to(handlers::auth::sign_up))
-                    .route("/auth/signin", web::post().to(handlers::auth::sign_in))
+                    // Auth - public (rate limited)
+                    .service(
+                        web::scope("/auth")
+                            .wrap(Governor::new(&auth_rate_limit))
+                            .route("/signup", web::post().to(handlers::auth::sign_up))
+                            .route("/signin", web::post().to(handlers::auth::sign_in))
+                            .route("/send-code", web::post().to(handlers::verification::send_code))
+                            .route("/verify-code", web::post().to(handlers::verification::verify_code))
+                    )
                     // Cars - public
                     .route("/cars/search", web::get().to(handlers::cars::search_cars))
                     .route("/cars/{id}/view", web::post().to(handlers::dashboard::increment_view))
@@ -77,9 +99,9 @@ async fn main() -> std::io::Result<()> {
                     .route("/users/{id}", web::get().to(handlers::auth::get_user_public))
                     .route("/users/{id}/reviews", web::get().to(handlers::reviews::get_user_reviews))
                     .route("/users/{id}/rating", web::get().to(handlers::reviews::get_user_rating))
-                    // Email verification - no auth (pre-signup)
-                    .route("/auth/send-code", web::post().to(handlers::verification::send_code))
-                    .route("/auth/verify-code", web::post().to(handlers::verification::verify_code))
+                    // Banks - public (for withdrawal form)
+                    .route("/payments/banks", web::get().to(handlers::payments::list_banks))
+                    .route("/payments/verify-account", web::post().to(handlers::payments::verify_bank_account))
                     // Paystack webhook - no auth
                     .route("/payments/webhook", web::post().to(handlers::payments::paystack_webhook))
                     // Authenticated routes
@@ -105,11 +127,18 @@ async fn main() -> std::io::Result<()> {
                             .route("/bookings/{id}", web::get().to(handlers::bookings::get_booking))
                             .route("/bookings/{id}/action", web::post().to(handlers::bookings::update_booking_status))
                             .route("/bookings/host/pending", web::get().to(handlers::bookings::get_host_pending_bookings))
-                            // Payments
-                            .route("/payments/initiate", web::post().to(handlers::payments::initiate_payment))
+                            // Payments (rate-limited sensitive ops)
+                            .service(
+                                web::scope("/payments")
+                                    .wrap(Governor::new(&payment_rate_limit))
+                                    .route("/initiate", web::post().to(handlers::payments::initiate_payment))
+                                    .route("/withdraw", web::post().to(handlers::payments::withdraw))
+                                    .route("/refund/{id}", web::post().to(handlers::payments::request_refund))
+                            )
+                            // Payments (read-only, no rate limit)
                             .route("/payments/wallet", web::get().to(handlers::payments::get_wallet_balance))
                             .route("/payments/wallet/transactions", web::get().to(handlers::payments::get_wallet_transactions))
-                            .route("/payments/refund/{id}", web::post().to(handlers::payments::request_refund))
+                            .route("/payments/earnings", web::get().to(handlers::payments::get_earnings))
                             // Saved Cards
                             .route("/cards", web::get().to(handlers::cards::list_cards))
                             .route("/cards/{id}/default", web::post().to(handlers::cards::set_default_card))

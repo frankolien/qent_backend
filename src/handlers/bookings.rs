@@ -6,6 +6,8 @@ use crate::models::{
     Booking, BookingAction, BookingActionRequest, BookingStatus, BookingWithCar, Car, Claims,
     CreateBookingRequest, ProtectionPlan, UserRole,
 };
+use crate::services::email::EmailService;
+use crate::services::AppConfig;
 
 pub async fn create_booking(
     req: HttpRequest,
@@ -192,6 +194,7 @@ pub async fn get_my_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
 pub async fn update_booking_status(
     req: HttpRequest,
     pool: web::Data<PgPool>,
+    config: web::Data<AppConfig>,
     path: web::Path<Uuid>,
     body: web::Json<BookingActionRequest>,
 ) -> HttpResponse {
@@ -346,6 +349,46 @@ pub async fn update_booking_status(
                     ).await;
                 }
                 _ => {}
+            }
+
+            // Send status change email
+            let email_service = EmailService::new(config.resend_api_key.clone());
+            let (notify_user_id, email_msg) = match new_status {
+                BookingStatus::Approved => (
+                    booking.renter_id,
+                    format!("Your booking for {} has been approved! Coordinate pickup with the host.", car_name),
+                ),
+                BookingStatus::Rejected => (
+                    booking.renter_id,
+                    format!("Your booking for {} was declined by the host.", car_name),
+                ),
+                BookingStatus::Cancelled => {
+                    let other = if claims.sub == booking.renter_id { booking.host_id } else { booking.renter_id };
+                    (other, format!("A booking for {} has been cancelled.", car_name))
+                }
+                BookingStatus::Active => (
+                    booking.renter_id,
+                    format!("Your trip with {} is now active. Enjoy your ride!", car_name),
+                ),
+                BookingStatus::Completed => (
+                    booking.renter_id,
+                    format!("Your trip with {} is complete. We'd love your feedback!", car_name),
+                ),
+                _ => (booking.renter_id, String::new()),
+            };
+
+            if !email_msg.is_empty() {
+                let user_info = sqlx::query_as::<_, (String, String)>(
+                    "SELECT email, full_name FROM users WHERE id = $1",
+                )
+                .bind(notify_user_id)
+                .fetch_optional(pool.get_ref())
+                .await;
+
+                if let Ok(Some((email, name))) = user_info {
+                    let status_str = format!("{:?}", new_status).to_lowercase();
+                    email_service.send_status_email(&email, &name, &car_name, &status_str, &email_msg).await;
+                }
             }
         }
         Err(_) => {}
