@@ -1,5 +1,7 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
-use sqlx::PgPool;
+use chrono::NaiveDate;
+use serde::Serialize;
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -297,6 +299,33 @@ pub async fn deactivate_car(
             HttpResponse::Ok().json(serde_json::json!({"message": "Car deactivated"}))
         }
         Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found or not authorized"})),
+        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct BookedDateRange {
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+}
+
+pub async fn get_booked_dates(
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let car_id = path.into_inner();
+
+    let result = sqlx::query_as::<_, BookedDateRange>(
+        r#"SELECT start_date, end_date FROM bookings
+        WHERE car_id = $1 AND status IN ('approved', 'confirmed', 'active')
+        ORDER BY start_date"#,
+    )
+    .bind(car_id)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(ranges) => HttpResponse::Ok().json(ranges),
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
     }
 }

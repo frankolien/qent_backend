@@ -67,10 +67,10 @@ async fn main() -> std::io::Result<()> {
                     // Auth - public
                     .route("/auth/signup", web::post().to(handlers::auth::sign_up))
                     .route("/auth/signin", web::post().to(handlers::auth::sign_in))
-                    // Cars - public search
+                    // Cars - public
                     .route("/cars/search", web::get().to(handlers::cars::search_cars))
-                    .route("/cars/{id}", web::get().to(handlers::cars::get_car))
                     .route("/cars/{id}/view", web::post().to(handlers::dashboard::increment_view))
+                    .route("/cars/{id}", web::get().to(handlers::cars::get_car))
                     // Protection plans - public
                     .route("/protection-plans", web::get().to(handlers::protection_plans::list_plans))
                     // Reviews - public
@@ -95,6 +95,7 @@ async fn main() -> std::io::Result<()> {
                             .route("/cars/my-listings", web::get().to(handlers::cars::get_host_cars))
                             .route("/cars/{id}", web::put().to(handlers::cars::update_car))
                             .route("/cars/{id}/deactivate", web::post().to(handlers::cars::deactivate_car))
+                            .route("/cars/{id}/booked-dates", web::get().to(handlers::cars::get_booked_dates))
                             // Host Dashboard
                             .route("/dashboard/stats", web::get().to(handlers::dashboard::get_host_stats))
                             .route("/dashboard/listings", web::get().to(handlers::dashboard::get_host_listings))
@@ -103,6 +104,7 @@ async fn main() -> std::io::Result<()> {
                             .route("/bookings/mine", web::get().to(handlers::bookings::get_my_bookings))
                             .route("/bookings/{id}", web::get().to(handlers::bookings::get_booking))
                             .route("/bookings/{id}/action", web::post().to(handlers::bookings::update_booking_status))
+                            .route("/bookings/host/pending", web::get().to(handlers::bookings::get_host_pending_bookings))
                             // Payments
                             .route("/payments/initiate", web::post().to(handlers::payments::initiate_payment))
                             .route("/payments/wallet", web::get().to(handlers::payments::get_wallet_balance))
