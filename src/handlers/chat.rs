@@ -42,7 +42,10 @@ pub struct MessageResponse {
 #[derive(Debug, Deserialize)]
 pub struct CreateConversationRequest {
     pub car_id: Uuid,
-    pub host_id: Uuid,
+    /// The other user in the conversation. Can be the host (if caller is renter)
+    /// or the renter (if caller is host).
+    #[serde(alias = "host_id")]
+    pub other_user_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,15 +65,41 @@ pub async fn get_or_create_conversation(
         None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
     };
 
-    let renter_id = claims.sub;
+    let caller_id = claims.sub;
     let car_id = body.car_id;
-    let host_id = body.host_id;
+    let other_user_id = body.other_user_id;
 
     // Prevent chatting with yourself
-    if renter_id == host_id {
+    if caller_id == other_user_id {
         return HttpResponse::BadRequest()
             .json(serde_json::json!({"error": "You cannot start a conversation with yourself"}));
     }
+
+    // Determine who is the host and who is the renter by checking car ownership
+    let car_host = sqlx::query_scalar::<_, Uuid>("SELECT host_id FROM cars WHERE id = $1")
+        .bind(car_id)
+        .fetch_optional(pool.get_ref())
+        .await;
+
+    let car_host_id = match car_host {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return HttpResponse::NotFound()
+                .json(serde_json::json!({"error": "Car not found"}));
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}));
+        }
+    };
+
+    // If the caller owns the car, they are the host; the other user is the renter.
+    // Otherwise, the caller is the renter and the other user is the host.
+    let (renter_id, host_id) = if caller_id == car_host_id {
+        (other_user_id, caller_id)
+    } else {
+        (caller_id, other_user_id)
+    };
 
     // Try to find existing conversation
     let existing = sqlx::query_as::<_, ConversationResponse>(
@@ -79,17 +108,25 @@ pub async fn get_or_create_conversation(
             conv.last_message_text, conv.last_message_at,
             conv.renter_unread_count, conv.host_unread_count,
             conv.status, conv.created_at,
-            u.full_name AS other_user_name,
-            u.role::text AS other_user_role,
+            CASE
+                WHEN conv.renter_id = $3 THEN host_u.full_name
+                ELSE renter_u.full_name
+            END AS other_user_name,
+            CASE
+                WHEN conv.renter_id = $3 THEN host_u.role::text
+                ELSE renter_u.role::text
+            END AS other_user_role,
             CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
             COALESCE(c.photos[1], '') AS car_photo
         FROM conversations conv
-        JOIN users u ON u.id = conv.host_id
+        JOIN users renter_u ON renter_u.id = conv.renter_id
+        JOIN users host_u ON host_u.id = conv.host_id
         JOIN cars c ON c.id = conv.car_id
         WHERE conv.car_id = $1 AND conv.renter_id = $2"#,
     )
     .bind(car_id)
     .bind(renter_id)
+    .bind(caller_id)
     .fetch_optional(pool.get_ref())
     .await;
 
@@ -131,16 +168,24 @@ pub async fn get_or_create_conversation(
             conv.last_message_text, conv.last_message_at,
             conv.renter_unread_count, conv.host_unread_count,
             conv.status, conv.created_at,
-            u.full_name AS other_user_name,
-            u.role::text AS other_user_role,
+            CASE
+                WHEN conv.renter_id = $2 THEN host_u.full_name
+                ELSE renter_u.full_name
+            END AS other_user_name,
+            CASE
+                WHEN conv.renter_id = $2 THEN host_u.role::text
+                ELSE renter_u.role::text
+            END AS other_user_role,
             CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
             COALESCE(c.photos[1], '') AS car_photo
         FROM conversations conv
-        JOIN users u ON u.id = conv.host_id
+        JOIN users renter_u ON renter_u.id = conv.renter_id
+        JOIN users host_u ON host_u.id = conv.host_id
         JOIN cars c ON c.id = conv.car_id
         WHERE conv.id = $1"#,
     )
     .bind(conv_id)
+    .bind(caller_id)
     .fetch_one(pool.get_ref())
     .await;
 

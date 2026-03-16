@@ -5,8 +5,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::{
-    Booking, BookingStatus, Claims, InitiatePaymentRequest, Payment, PaymentInitResponse,
-    PaymentStatus, PaystackWebhookEvent, TransactionType, WalletTransaction,
+    Booking, BookingStatus, Claims, EarningEntry, EarningsStats, InitiatePaymentRequest, Payment,
+    PaymentInitResponse, PaymentStatus, PaystackWebhookEvent, TransactionType,
+    VerifyAccountRequest, WalletTransaction,
 };
 use crate::services::email::EmailService;
 use crate::services::AppConfig;
@@ -305,6 +306,237 @@ pub async fn get_wallet_transactions(req: HttpRequest, pool: web::Data<PgPool>) 
     match transactions {
         Ok(t) => HttpResponse::Ok().json(t),
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// POST /api/payments/withdraw — Host withdraws wallet balance via Paystack transfer
+pub async fn withdraw(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    config: web::Data<AppConfig>,
+    body: web::Json<crate::models::PayoutRequest>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    if body.amount < 1000.0 {
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "Minimum withdrawal is ₦1,000"}));
+    }
+
+    // Check balance
+    let balance = sqlx::query_scalar::<_, f64>("SELECT wallet_balance FROM users WHERE id = $1")
+        .bind(claims.sub)
+        .fetch_one(pool.get_ref())
+        .await
+        .unwrap_or(0.0);
+
+    if body.amount > balance {
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "Insufficient wallet balance", "balance": balance}));
+    }
+
+    // Step 1: Create a Paystack transfer recipient
+    let client = reqwest::Client::new();
+    let recipient_resp = client
+        .post("https://api.paystack.co/transferrecipient")
+        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .json(&serde_json::json!({
+            "type": "nuban",
+            "name": claims.sub.to_string(),
+            "account_number": body.account_number,
+            "bank_code": body.bank_code,
+            "currency": "NGN"
+        }))
+        .send()
+        .await;
+
+    let recipient_code = match recipient_resp {
+        Ok(resp) => {
+            let json: serde_json::Value = resp.json().await.unwrap_or_default();
+            if json["status"].as_bool() != Some(true) {
+                let msg = json["message"].as_str().unwrap_or("Failed to create transfer recipient");
+                return HttpResponse::BadRequest()
+                    .json(serde_json::json!({"error": msg}));
+            }
+            json["data"]["recipient_code"].as_str().unwrap_or("").to_string()
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": format!("Payment provider error: {}", e)}));
+        }
+    };
+
+    // Step 2: Initiate transfer
+    let reference = format!("qent_wd_{}", Uuid::new_v4());
+    let amount_kobo = (body.amount * 100.0) as i64;
+
+    let transfer_resp = client
+        .post("https://api.paystack.co/transfer")
+        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .json(&serde_json::json!({
+            "source": "balance",
+            "reason": "Qent host withdrawal",
+            "amount": amount_kobo,
+            "recipient": recipient_code,
+            "reference": reference
+        }))
+        .send()
+        .await;
+
+    match transfer_resp {
+        Ok(resp) => {
+            let json: serde_json::Value = resp.json().await.unwrap_or_default();
+            if json["status"].as_bool() != Some(true) {
+                let msg = json["message"].as_str().unwrap_or("Transfer failed");
+                return HttpResponse::BadRequest()
+                    .json(serde_json::json!({"error": msg}));
+            }
+
+            // Debit wallet
+            let _ = sqlx::query(
+                "UPDATE users SET wallet_balance = wallet_balance - $1, updated_at = NOW() WHERE id = $2",
+            )
+            .bind(body.amount)
+            .bind(claims.sub)
+            .execute(pool.get_ref())
+            .await;
+
+            // Record wallet transaction (negative amount = debit)
+            let _ = sqlx::query(
+                r#"INSERT INTO wallet_transactions (id, user_id, amount, balance_after, description, created_at)
+                VALUES ($1, $2, $3, (SELECT wallet_balance FROM users WHERE id = $2), $4, NOW())"#,
+            )
+            .bind(Uuid::new_v4())
+            .bind(claims.sub)
+            .bind(-body.amount)
+            .bind(format!("Withdrawal to bank account ****{}", &body.account_number[body.account_number.len().saturating_sub(4)..]))
+            .execute(pool.get_ref())
+            .await;
+
+            HttpResponse::Ok().json(serde_json::json!({
+                "message": "Withdrawal initiated",
+                "amount": body.amount,
+                "reference": reference,
+                "status": "processing"
+            }))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": format!("Transfer failed: {}", e)}))
+        }
+    }
+}
+
+/// GET /api/payments/earnings — Host earnings breakdown
+pub async fn get_earnings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    // Total earnings, this month, pending (approved/active bookings)
+    let stats = sqlx::query_as::<_, EarningsStats>(
+        r#"SELECT
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN subtotal * 0.85 ELSE 0 END), 0) as total_earned,
+            COALESCE(SUM(CASE WHEN status = 'completed' AND updated_at >= date_trunc('month', NOW()) THEN subtotal * 0.85 ELSE 0 END), 0) as this_month,
+            COALESCE(SUM(CASE WHEN status IN ('approved', 'confirmed', 'active') THEN subtotal * 0.85 ELSE 0 END), 0) as pending_earnings,
+            COUNT(CASE WHEN status = 'completed' THEN 1 END)::int as completed_trips
+        FROM bookings WHERE host_id = $1"#,
+    )
+    .bind(claims.sub)
+    .fetch_one(pool.get_ref())
+    .await;
+
+    let balance = sqlx::query_scalar::<_, f64>("SELECT wallet_balance FROM users WHERE id = $1")
+        .bind(claims.sub)
+        .fetch_one(pool.get_ref())
+        .await
+        .unwrap_or(0.0);
+
+    // Recent completed bookings with earnings
+    let recent = sqlx::query_as::<_, EarningEntry>(
+        r#"SELECT b.id as booking_id, (c.make || ' ' || c.model) as car_name,
+            b.subtotal * 0.85 as earned, b.updated_at as completed_at,
+            u.full_name as renter_name
+        FROM bookings b
+        LEFT JOIN cars c ON c.id = b.car_id
+        LEFT JOIN users u ON u.id = b.renter_id
+        WHERE b.host_id = $1 AND b.status = 'completed'
+        ORDER BY b.updated_at DESC LIMIT 20"#,
+    )
+    .bind(claims.sub)
+    .fetch_all(pool.get_ref())
+    .await
+    .unwrap_or_default();
+
+    match stats {
+        Ok(s) => HttpResponse::Ok().json(serde_json::json!({
+            "total_earned": s.total_earned,
+            "this_month": s.this_month,
+            "pending_earnings": s.pending_earnings,
+            "completed_trips": s.completed_trips,
+            "wallet_balance": balance,
+            "platform_fee_percent": 15,
+            "recent_earnings": recent
+        })),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// GET /api/payments/banks — List Nigerian banks (via Paystack)
+pub async fn list_banks(config: web::Data<AppConfig>) -> HttpResponse {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get("https://api.paystack.co/bank?country=nigeria")
+        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .send()
+        .await;
+
+    match resp {
+        Ok(r) => {
+            let json: serde_json::Value = r.json().await.unwrap_or_default();
+            HttpResponse::Ok().json(json["data"].clone())
+        }
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": format!("Failed to fetch banks: {}", e)})),
+    }
+}
+
+/// POST /api/payments/verify-account — Verify bank account details
+pub async fn verify_bank_account(
+    config: web::Data<AppConfig>,
+    body: web::Json<VerifyAccountRequest>,
+) -> HttpResponse {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&format!(
+            "https://api.paystack.co/bank/resolve?account_number={}&bank_code={}",
+            body.account_number, body.bank_code
+        ))
+        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .send()
+        .await;
+
+    match resp {
+        Ok(r) => {
+            let json: serde_json::Value = r.json().await.unwrap_or_default();
+            if json["status"].as_bool() == Some(true) {
+                HttpResponse::Ok().json(serde_json::json!({
+                    "account_name": json["data"]["account_name"],
+                    "account_number": json["data"]["account_number"],
+                    "bank_code": body.bank_code
+                }))
+            } else {
+                let msg = json["message"].as_str().unwrap_or("Could not resolve account");
+                HttpResponse::BadRequest().json(serde_json::json!({"error": msg}))
+            }
+        }
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": format!("Verification failed: {}", e)})),
     }
 }
 

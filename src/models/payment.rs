@@ -81,6 +81,29 @@ pub struct PayoutRequest {
     pub account_number: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct VerifyAccountRequest {
+    pub account_number: String,
+    pub bank_code: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct EarningsStats {
+    pub total_earned: f64,
+    pub this_month: f64,
+    pub pending_earnings: f64,
+    pub completed_trips: i32,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct EarningEntry {
+    pub booking_id: Uuid,
+    pub car_name: Option<String>,
+    pub earned: f64,
+    pub completed_at: NaiveDateTime,
+    pub renter_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WalletTransaction {
     pub id: Uuid,
