@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::{
-    Booking, BookingAction, BookingActionRequest, BookingStatus, Car, Claims,
+    Booking, BookingAction, BookingActionRequest, BookingStatus, BookingWithCar, Car, Claims,
     CreateBookingRequest, ProtectionPlan, UserRole,
 };
 
@@ -117,7 +117,18 @@ pub async fn create_booking(
     .await;
 
     match result {
-        Ok(booking) => HttpResponse::Created().json(booking),
+        Ok(booking) => {
+            // Notify host about new booking request
+            let _ = create_notification(
+                pool.get_ref(),
+                car.host_id,
+                "New Booking Request",
+                &format!("You have a new booking request for your {} {}", car.make, car.model),
+                "booking_request",
+                Some(serde_json::json!({"booking_id": booking.id.to_string()})),
+            ).await;
+            HttpResponse::Created().json(booking)
+        }
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
     }
 }
@@ -156,8 +167,17 @@ pub async fn get_my_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
         None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
     };
 
-    let result = sqlx::query_as::<_, Booking>(
-        "SELECT * FROM bookings WHERE renter_id = $1 OR host_id = $1 ORDER BY created_at DESC",
+    let result = sqlx::query_as::<_, BookingWithCar>(
+        r#"SELECT b.*,
+            (c.make || ' ' || c.model || ' ' || c.year::text) as car_name,
+            c.photos[1] as car_photo,
+            c.location as car_location,
+            u.full_name as renter_name
+        FROM bookings b
+        LEFT JOIN cars c ON c.id = b.car_id
+        LEFT JOIN users u ON u.id = b.renter_id
+        WHERE b.renter_id = $1 OR b.host_id = $1
+        ORDER BY b.created_at DESC"#,
     )
     .bind(claims.sub)
     .fetch_all(pool.get_ref())
@@ -214,6 +234,15 @@ pub async fn update_booking_status(
             }
             BookingStatus::Cancelled
         }
+        BookingAction::Activate => {
+            if booking.host_id != claims.sub && claims.role != UserRole::Admin {
+                return HttpResponse::Forbidden().json(serde_json::json!({"error": "Only the host can activate"}));
+            }
+            if booking.status != BookingStatus::Approved && booking.status != BookingStatus::Confirmed {
+                return HttpResponse::BadRequest().json(serde_json::json!({"error": "Booking must be approved or confirmed to activate"}));
+            }
+            BookingStatus::Active
+        }
         BookingAction::Complete => {
             if booking.host_id != claims.sub && claims.role != UserRole::Admin {
                 return HttpResponse::Forbidden().json(serde_json::json!({"error": "Only the host can complete"}));
@@ -259,8 +288,124 @@ pub async fn update_booking_status(
         .await;
     }
 
+    // Fetch car name for notification
+    let car_name = sqlx::query_scalar::<_, String>(
+        "SELECT make || ' ' || model FROM cars WHERE id = $1",
+    )
+    .bind(booking.car_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| "your car".to_string());
+
+    match &result {
+        Ok(b) => {
+            let data = Some(serde_json::json!({"booking_id": b.id.to_string()}));
+            match new_status {
+                BookingStatus::Approved => {
+                    let _ = create_notification(
+                        pool.get_ref(), booking.renter_id,
+                        "Booking Approved",
+                        &format!("Your booking for {} has been approved! Coordinate pickup with the host.", car_name),
+                        "booking_approved", data,
+                    ).await;
+                }
+                BookingStatus::Rejected => {
+                    let _ = create_notification(
+                        pool.get_ref(), booking.renter_id,
+                        "Booking Declined",
+                        &format!("Your booking for {} was declined by the host.", car_name),
+                        "booking_rejected", data,
+                    ).await;
+                }
+                BookingStatus::Cancelled => {
+                    // Notify the other party
+                    let notify_user = if claims.sub == booking.renter_id { booking.host_id } else { booking.renter_id };
+                    let _ = create_notification(
+                        pool.get_ref(), notify_user,
+                        "Booking Cancelled",
+                        &format!("A booking for {} has been cancelled.", car_name),
+                        "booking_cancelled", data,
+                    ).await;
+                }
+                BookingStatus::Active => {
+                    let _ = create_notification(
+                        pool.get_ref(), booking.renter_id,
+                        "Trip Started",
+                        &format!("Your trip with {} is now active. Enjoy your ride!", car_name),
+                        "booking_active", data,
+                    ).await;
+                }
+                BookingStatus::Completed => {
+                    let _ = create_notification(
+                        pool.get_ref(), booking.renter_id,
+                        "Trip Completed",
+                        &format!("Your trip with {} is complete. Leave a review!", car_name),
+                        "booking_completed", data,
+                    ).await;
+                }
+                _ => {}
+            }
+        }
+        Err(_) => {}
+    }
+
     match result {
         Ok(b) => HttpResponse::Ok().json(b),
+        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// Helper to create a notification record
+async fn create_notification(
+    pool: &PgPool,
+    user_id: Uuid,
+    title: &str,
+    message: &str,
+    notification_type: &str,
+    data: Option<serde_json::Value>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, data, created_at)
+        VALUES ($1, $2, $3, $4, $5, false, $6, NOW())"#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(user_id)
+    .bind(title)
+    .bind(message)
+    .bind(notification_type)
+    .bind(data)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Get pending bookings for host (bookings awaiting their approval)
+pub async fn get_host_pending_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let result = sqlx::query_as::<_, BookingWithCar>(
+        r#"SELECT b.*,
+            (c.make || ' ' || c.model || ' ' || c.year::text) as car_name,
+            c.photos[1] as car_photo,
+            c.location as car_location,
+            u.full_name as renter_name
+        FROM bookings b
+        LEFT JOIN cars c ON c.id = b.car_id
+        LEFT JOIN users u ON u.id = b.renter_id
+        WHERE b.host_id = $1 AND b.status = 'pending'
+        ORDER BY b.created_at DESC"#,
+    )
+    .bind(claims.sub)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(bookings) => HttpResponse::Ok().json(bookings),
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
     }
 }

@@ -20,6 +20,7 @@ pub struct ConversationResponse {
     pub created_at: NaiveDateTime,
     // Joined fields
     pub other_user_name: String,
+    pub other_user_role: String,
     pub car_name: String,
     pub car_photo: String,
 }
@@ -79,6 +80,7 @@ pub async fn get_or_create_conversation(
             conv.renter_unread_count, conv.host_unread_count,
             conv.status, conv.created_at,
             u.full_name AS other_user_name,
+            u.role::text AS other_user_role,
             CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
             COALESCE(c.photos[1], '') AS car_photo
         FROM conversations conv
@@ -130,6 +132,7 @@ pub async fn get_or_create_conversation(
             conv.renter_unread_count, conv.host_unread_count,
             conv.status, conv.created_at,
             u.full_name AS other_user_name,
+            u.role::text AS other_user_role,
             CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
             COALESCE(c.photos[1], '') AS car_photo
         FROM conversations conv
@@ -166,6 +169,10 @@ pub async fn get_conversations(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
                 WHEN conv.renter_id = $1 THEN host_u.full_name
                 ELSE renter_u.full_name
             END AS other_user_name,
+            CASE
+                WHEN conv.renter_id = $1 THEN host_u.role::text
+                ELSE renter_u.role::text
+            END AS other_user_role,
             CONCAT(c.make, ' ', c.model, ' ', c.year) AS car_name,
             COALESCE(c.photos[1], '') AS car_photo
         FROM conversations conv

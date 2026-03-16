@@ -99,7 +99,7 @@ pub async fn sign_in(
     body: web::Json<SignInRequest>,
 ) -> HttpResponse {
     let user = sqlx::query_as::<_, crate::models::User>(
-        "SELECT * FROM users WHERE email = $1 AND is_active = true",
+        "SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true",
     )
     .bind(&body.email)
     .fetch_optional(pool.get_ref())
