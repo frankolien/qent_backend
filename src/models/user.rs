@@ -117,3 +117,26 @@ pub struct Claims {
     pub role: UserRole,
     pub exp: usize,
 }
+
+#[derive(Debug, Serialize)]
+pub struct AuthResponseWithRefresh {
+    pub token: String,
+    pub refresh_token: String,
+    pub user: UserPublic,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RefreshTokenRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub new_password: String,
+}

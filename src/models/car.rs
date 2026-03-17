@@ -87,6 +87,15 @@ pub struct CarSearchQuery {
     pub color: Option<String>,
     pub seats: Option<i32>,
     pub fuel_type: Option<String>,
+    pub sort_by: Option<String>, // price_asc, price_desc, newest, rating, distance
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
     pub page: Option<i64>,
     pub per_page: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HomepageQuery {
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }

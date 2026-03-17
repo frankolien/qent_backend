@@ -2,7 +2,8 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::{Booking, Car, CarStatus, Claims, Payment, User, UserRole, VerificationStatus};
+use crate::models::{Booking, Car, CarStatus, Claims, Payment, User, UserRole, VerificationStatus, WalletTransaction};
+use crate::services::AppConfig;
 
 fn require_admin(req: &HttpRequest) -> Result<Claims, HttpResponse> {
     let claims = req
@@ -319,4 +320,124 @@ pub async fn handle_dispute_refund(
         "message": "Dispute resolved, full refund issued",
         "refund_amount": booking.total_amount
     }))
+}
+
+/// GET /api/admin/withdrawals/pending — List pending withdrawal approvals
+pub async fn list_pending_withdrawals(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
+    if let Err(resp) = require_admin(&req) {
+        return resp;
+    }
+
+    let result = sqlx::query_as::<_, WalletTransaction>(
+        r#"SELECT wt.* FROM wallet_transactions wt
+        WHERE wt.status = 'pending_approval'
+        ORDER BY wt.created_at DESC"#,
+    )
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(txns) => HttpResponse::Ok().json(txns),
+        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// POST /api/admin/withdrawals/{id}/approve — Approve a pending withdrawal
+pub async fn approve_withdrawal(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    config: web::Data<AppConfig>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    if let Err(resp) = require_admin(&req) {
+        return resp;
+    }
+
+    let txn_id = path.into_inner();
+
+    // Get the pending transaction
+    let txn = sqlx::query_as::<_, WalletTransaction>(
+        "SELECT * FROM wallet_transactions WHERE id = $1 AND status = 'pending_approval'",
+    )
+    .bind(txn_id)
+    .fetch_optional(pool.get_ref())
+    .await;
+
+    let txn = match txn {
+        Ok(Some(t)) => t,
+        _ => return HttpResponse::NotFound().json(serde_json::json!({"error": "Pending withdrawal not found"})),
+    };
+
+    // Mark as completed
+    let _ = sqlx::query("UPDATE wallet_transactions SET status = 'completed' WHERE id = $1")
+        .bind(txn_id)
+        .execute(pool.get_ref())
+        .await;
+
+    // Notify user
+    let _ = sqlx::query(
+        r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, created_at)
+        VALUES ($1, $2, 'Withdrawal Approved', 'Your withdrawal has been approved and is being processed.', 'withdrawal_approved', false, NOW())"#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(txn.user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    let _ = config; // future: trigger actual Paystack transfer here
+
+    HttpResponse::Ok().json(serde_json::json!({"message": "Withdrawal approved", "transaction_id": txn_id}))
+}
+
+/// POST /api/admin/withdrawals/{id}/reject — Reject and refund a pending withdrawal
+pub async fn reject_withdrawal(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    if let Err(resp) = require_admin(&req) {
+        return resp;
+    }
+
+    let txn_id = path.into_inner();
+
+    let txn = sqlx::query_as::<_, WalletTransaction>(
+        "SELECT * FROM wallet_transactions WHERE id = $1 AND status = 'pending_approval'",
+    )
+    .bind(txn_id)
+    .fetch_optional(pool.get_ref())
+    .await;
+
+    let txn = match txn {
+        Ok(Some(t)) => t,
+        _ => return HttpResponse::NotFound().json(serde_json::json!({"error": "Pending withdrawal not found"})),
+    };
+
+    // Refund the held amount back to wallet
+    let refund_amount = txn.amount.abs();
+    let _ = sqlx::query(
+        "UPDATE users SET wallet_balance = wallet_balance + $1, updated_at = NOW() WHERE id = $2",
+    )
+    .bind(refund_amount)
+    .bind(txn.user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    // Mark as rejected
+    let _ = sqlx::query("UPDATE wallet_transactions SET status = 'rejected', admin_notes = 'Rejected by admin' WHERE id = $1")
+        .bind(txn_id)
+        .execute(pool.get_ref())
+        .await;
+
+    // Notify user
+    let _ = sqlx::query(
+        r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, created_at)
+        VALUES ($1, $2, 'Withdrawal Rejected', 'Your withdrawal was rejected and the funds have been returned to your wallet.', 'withdrawal_rejected', false, NOW())"#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(txn.user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    HttpResponse::Ok().json(serde_json::json!({"message": "Withdrawal rejected, funds returned", "transaction_id": txn_id}))
 }
