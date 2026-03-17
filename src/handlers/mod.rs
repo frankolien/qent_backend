@@ -16,3 +16,4 @@ pub mod stories;
 pub mod damage_reports;
 pub mod compliance;
 pub mod waitlist;
+pub mod health;
