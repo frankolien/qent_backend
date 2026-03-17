@@ -147,6 +147,9 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("https://qent.online")
             .allowed_origin("https://www.qent.online")
             .allowed_origin("https://qent.netlify.app") // Netlify default domain
+            .allowed_origin("https://thriving-bonbon-08b8ce.netlify.app")
+            .allowed_origin("http://qent.online")
+            .allowed_origin("http://www.qent.online")
             .allow_any_method()
             .allow_any_header()
             .max_age(3600);
