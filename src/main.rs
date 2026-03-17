@@ -159,6 +159,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(config.clone()))
+            .route("/health", web::get().to(handlers::health::health_check))
             .service(
                 web::scope("/api")
                     // Auth - public (rate limited)
