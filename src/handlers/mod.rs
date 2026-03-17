@@ -13,3 +13,6 @@ pub mod partner;
 pub mod chat;
 pub mod dashboard;
 pub mod stories;
+pub mod damage_reports;
+pub mod compliance;
+pub mod waitlist;

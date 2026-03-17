@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qent - Car Rental Made Easy | Nigeria</title>
+  <meta name="description" content="Rent cars from trusted hosts near you. List your car and earn. Nigeria's new peer-to-peer car rental platform.">
+  <meta property="og:title" content="Qent - Car Rental Made Easy">
+  <meta property="og:description" content="Rent cars from trusted hosts near you. List your car and earn.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://qent.online">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --black: #1A1A1A;
+      --white: #FFFFFF;
+      --gray-50: #F8F8F8;
+      --gray-100: #F2F2F2;
+      --gray-200: #E5E5E5;
+      --gray-400: #999;
+      --gray-500: #777;
+      --green: #2E7D32;
+      --green-bg: #E8F5E9;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--white);
+      color: var(--black);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Nav ─────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--black);
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--black);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 800;
+      font-size: 16px;
+    }
+
+    .logo-text {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .nav-cta {
+      background: var(--black);
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    .nav-cta:hover { transform: scale(1.03); opacity: 0.9; }
+
+    /* ── Hero ────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 140px 20px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      right: -200px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(46,125,50,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: -100px;
+      left: -100px;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(26,26,26,0.03) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--green-bg);
+      color: var(--green);
+      padding: 8px 18px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 32px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    h1 {
+      font-size: clamp(42px, 7vw, 80px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -3px;
+      max-width: 800px;
+      margin-bottom: 24px;
+    }
+
+    h1 span {
+      background: linear-gradient(135deg, var(--green), #1B5E20);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--gray-500);
+      max-width: 520px;
+      line-height: 1.6;
+      margin-bottom: 48px;
+    }
+
+    /* ── Waitlist Form ───────────────── */
+    .waitlist-form {
+      display: flex;
+      gap: 12px;
+      max-width: 520px;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+
+    .waitlist-form input {
+      flex: 1;
+      padding: 16px 20px;
+      border: 2px solid var(--gray-200);
+      border-radius: 16px;
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      background: var(--gray-50);
+    }
+
+    .waitlist-form input:focus {
+      border-color: var(--black);
+      background: white;
+    }
+
+    .waitlist-form button {
+      padding: 16px 36px;
+      background: var(--black);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s, opacity 0.2s;
+      white-space: nowrap;
+    }
+
+    .waitlist-form button:hover { transform: scale(1.03); }
+    .waitlist-form button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .social-proof {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--gray-400);
+      font-size: 14px;
+    }
+
+    .avatar-stack {
+      display: flex;
+    }
+
+    .avatar-stack span {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid white;
+      margin-left: -8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: white;
+    }
+
+    .avatar-stack span:first-child { margin-left: 0; }
+    .avatar-stack span:nth-child(1) { background: #FF6B6B; }
+    .avatar-stack span:nth-child(2) { background: #4ECDC4; }
+    .avatar-stack span:nth-child(3) { background: #45B7D1; }
+    .avatar-stack span:nth-child(4) { background: #96CEB4; }
+
+    .success-msg {
+      background: var(--green-bg);
+      color: var(--green);
+      padding: 16px 24px;
+      border-radius: 16px;
+      font-weight: 600;
+      font-size: 15px;
+      display: none;
+      animation: slideUp 0.4s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Role Selector ───────────────── */
+    .role-selector {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .role-btn {
+      padding: 10px 24px;
+      border: 2px solid var(--gray-200);
+      border-radius: 100px;
+      background: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--gray-500);
+    }
+
+    .role-btn.active {
+      border-color: var(--black);
+      background: var(--black);
+      color: white;
+    }
+
+    .role-btn:hover:not(.active) { border-color: var(--gray-400); }
+
+    /* ── Features ────────────────────── */
+    .features {
+      padding: 100px 20px;
+      background: var(--gray-50);
+    }
+
+    .features-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .features h2 {
+      font-size: clamp(28px, 4vw, 42px);
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 12px;
+      letter-spacing: -1px;
+    }
+
+    .features-sub {
+      text-align: center;
+      color: var(--gray-500);
+      font-size: 16px;
+      margin-bottom: 64px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: white;
+      border-radius: 24px;
+      padding: 36px 28px;
+      transition: transform 0.3s;
+    }
+
+    .feature-card:hover { transform: translateY(-4px); }
+
+    .feature-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .feature-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      color: var(--gray-500);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── How it works ────────────────── */
+    .how-it-works {
+      padding: 100px 20px;
+    }
+
+    .how-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .how-it-works h2 {
+      font-size: clamp(28px, 4vw, 42px);
+      font-weight: 800;
+      margin-bottom: 12px;
+      letter-spacing: -1px;
+    }
+
+    .how-sub {
+      color: var(--gray-500);
+      font-size: 16px;
+      margin-bottom: 64px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+      text-align: center;
+    }
+
+    .step-num {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--black);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 20px;
+    }
+
+    .steps h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .steps p {
+      color: var(--gray-500);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── Host CTA ────────────────────── */
+    .host-cta {
+      padding: 80px 20px;
+      background: var(--black);
+      color: white;
+      text-align: center;
+    }
+
+    .host-cta-inner {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .host-cta h2 {
+      font-size: clamp(28px, 4vw, 42px);
+      font-weight: 800;
+      margin-bottom: 16px;
+      letter-spacing: -1px;
+    }
+
+    .host-cta p {
+      color: rgba(255,255,255,0.6);
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 36px;
+    }
+
+    .host-cta-btn {
+      display: inline-block;
+      padding: 16px 40px;
+      background: white;
+      color: var(--black);
+      border-radius: 100px;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.2s;
+    }
+
+    .host-cta-btn:hover { transform: scale(1.03); }
+
+    .host-stats {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 48px;
+    }
+
+    .host-stat h4 {
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .host-stat p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 0;
+    }
+
+    /* ── Footer ──────────────────────── */
+    footer {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--gray-400);
+      font-size: 13px;
+      border-top: 1px solid var(--gray-100);
+    }
+
+    footer a { color: var(--gray-500); text-decoration: none; }
+    footer a:hover { color: var(--black); }
+
+    /* ── Mobile ──────────────────────── */
+    @media (max-width: 768px) {
+      nav { padding: 16px 20px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; gap: 32px; }
+      .waitlist-form { flex-direction: column; }
+      .waitlist-form button { width: 100%; }
+      .host-stats { flex-direction: column; gap: 20px; }
+      h1 { letter-spacing: -2px; }
+      .role-selector { flex-wrap: wrap; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <a href="#" class="logo">
+      <div class="logo-icon">Q</div>
+      <div class="logo-text">Qent</div>
+    </a>
+    <button class="nav-cta" onclick="document.getElementById('email').focus()">Join Waitlist</button>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Launching soon in Nigeria
+    </div>
+    <h1>Rent Cars From <span>Real People</span></h1>
+    <p class="hero-sub">Find affordable cars from trusted hosts near you. Or list your car and earn extra income. Peer-to-peer car rental, made simple.</p>
+
+    <div class="role-selector">
+      <button class="role-btn active" onclick="selectRole(this, 'renter')">I want to rent</button>
+      <button class="role-btn" onclick="selectRole(this, 'host')">I want to list my car</button>
+      <button class="role-btn" onclick="selectRole(this, 'both')">Both</button>
+    </div>
+
+    <form class="waitlist-form" id="waitlistForm" onsubmit="handleSubmit(event)">
+      <input type="email" id="email" name="email" placeholder="Enter your email" required autocomplete="email">
+      <button type="submit" id="submitBtn">Join Waitlist</button>
+    </form>
+
+    <div class="success-msg" id="successMsg"></div>
+
+    <div class="social-proof">
+      <div class="avatar-stack">
+        <span>A</span><span>O</span><span>C</span><span>T</span>
+      </div>
+      <span id="countText">Join the waitlist</span>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features">
+    <div class="features-inner">
+      <h2>Why Qent?</h2>
+      <p class="features-sub">Built for how Nigerians actually move.</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#E3F2FD">&#128663;</div>
+          <h3>Cars Near You</h3>
+          <p>Find cars in your area. Lagos, Abuja, PH, and more cities. No middlemen, no hidden fees.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#E8F5E9">&#128176;</div>
+          <h3>Earn With Your Car</h3>
+          <p>List your car when you're not using it. Set your own price, your own rules. Keep 85% of every booking.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#FFF3E0">&#128274;</div>
+          <h3>Verified & Protected</h3>
+          <p>Every user is verified. Every trip is covered by protection plans. Paystack-secured payments.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#F3E5F5">&#128172;</div>
+          <h3>In-App Chat</h3>
+          <p>Message hosts directly. Coordinate pickup and drop-off without sharing your phone number.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#FFEBEE">&#9201;</div>
+          <h3>Instant Booking</h3>
+          <p>Book a car in minutes. Get approved fast. No paperwork, no wahala.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#E0F7FA">&#128179;</div>
+          <h3>Easy Payouts</h3>
+          <p>Hosts get paid directly to their bank account. Withdraw anytime. No minimum wait period.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how-it-works">
+    <div class="how-inner">
+      <h2>How It Works</h2>
+      <p class="how-sub">Three steps to your next ride.</p>
+      <div class="steps">
+        <div>
+          <div class="step-num">1</div>
+          <h3>Find a Car</h3>
+          <p>Browse cars near you. Filter by price, brand, date, and more. See real photos and reviews.</p>
+        </div>
+        <div>
+          <div class="step-num">2</div>
+          <h3>Book & Pay</h3>
+          <p>Pick your dates, choose a protection plan, and pay securely through Paystack. The host approves instantly.</p>
+        </div>
+        <div>
+          <div class="step-num">3</div>
+          <h3>Pick Up & Drive</h3>
+          <p>Meet the host, inspect the car, and you're on the road. Return it when you're done.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Host CTA -->
+  <section class="host-cta">
+    <div class="host-cta-inner">
+      <h2>Your Car Could Be Earning</h2>
+      <p>The average Qent host in Lagos can earn up to &#8358;300,000/month. Your car sits idle 90% of the time — put it to work.</p>
+      <a href="#" class="host-cta-btn" onclick="selectRole(document.querySelectorAll('.role-btn')[1], 'host'); document.getElementById('email').focus(); window.scrollTo({top:0,behavior:'smooth'}); return false;">List Your Car</a>
+      <div class="host-stats">
+        <div class="host-stat">
+          <h4>85%</h4>
+          <p>You keep per booking</p>
+        </div>
+        <div class="host-stat">
+          <h4>&#8358;0</h4>
+          <p>To list your car</p>
+        </div>
+        <div class="host-stat">
+          <h4>24h</h4>
+          <p>Average payout time</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>&copy; 2026 Qent. All rights reserved. &nbsp;|&nbsp; <a href="#">Privacy Policy</a> &nbsp;|&nbsp; <a href="#">Terms of Service</a></p>
+  </footer>
+
+  <script>
+    // ─── Config ──────────────────────────────────
+    const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://127.0.0.1:8080/api'      // Local dev
+      : 'https://qent-api.onrender.com/api';  // Production (update this after Render deploy)
+
+    let selectedRole = 'renter';
+
+    function selectRole(btn, role) {
+      document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedRole = role;
+    }
+
+    // ─── Load count on page load ─────────────────
+    async function loadCount() {
+      try {
+        const resp = await fetch(`${API_URL}/waitlist/count`);
+        const data = await resp.json();
+        if (data.count > 0) {
+          document.getElementById('countText').textContent = `${data.count}+ people already joined`;
+        }
+      } catch (e) {
+        // Silently fail — count is just nice to have
+      }
+    }
+
+    // ─── Submit form ─────────────────────────────
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const btn = document.getElementById('submitBtn');
+      const form = document.getElementById('waitlistForm');
+      const successMsg = document.getElementById('successMsg');
+
+      if (!email) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Joining...';
+
+      try {
+        const resp = await fetch(`${API_URL}/waitlist`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, role: selectedRole }),
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok) {
+          form.style.display = 'none';
+          successMsg.style.display = 'block';
+          successMsg.innerHTML = `You're in! We'll let you know first when Qent launches. <span style="opacity:0.7">Keep an eye on your inbox.</span>`;
+          document.getElementById('countText').textContent = `${data.position}+ early birds already joined`;
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'Join Waitlist';
+          alert(data.error || 'Something went wrong. Try again.');
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Join Waitlist';
+        alert('Network error. Please try again.');
+      }
+    }
+
+    // Load count on page ready
+    loadCount();
+  </script>
+</body>
+</html>

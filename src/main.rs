@@ -5,6 +5,7 @@ use actix_web::body::MessageBody;
 use actix_web::dev::ServiceResponse;
 use actix_web::middleware::Next;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 
 mod handlers;
 mod middleware;
@@ -13,6 +14,76 @@ mod services;
 
 use crate::middleware::auth::validate_token;
 use crate::services::AppConfig;
+
+/// Background task: auto-complete bookings past their end_date (runs every hour)
+async fn auto_complete_bookings(pool: PgPool) {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+    loop {
+        interval.tick().await;
+        log::info!("Running auto-complete check for overdue bookings...");
+
+        // Find active bookings past their end_date
+        let overdue = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, f64)>(
+            r#"SELECT id, host_id, subtotal FROM bookings
+               WHERE status = 'active' AND end_date < CURRENT_DATE"#,
+        )
+        .fetch_all(&pool)
+        .await;
+
+        match overdue {
+            Ok(bookings) => {
+                for (booking_id, host_id, subtotal) in &bookings {
+                    // Mark as completed
+                    let _ = sqlx::query(
+                        "UPDATE bookings SET status = 'completed', updated_at = NOW() WHERE id = $1",
+                    )
+                    .bind(booking_id)
+                    .execute(&pool)
+                    .await;
+
+                    // Credit host wallet (85%)
+                    let payout = subtotal * 0.85;
+                    let _ = sqlx::query(
+                        "UPDATE users SET wallet_balance = wallet_balance + $1, updated_at = NOW() WHERE id = $2",
+                    )
+                    .bind(payout)
+                    .bind(host_id)
+                    .execute(&pool)
+                    .await;
+
+                    // Record wallet transaction
+                    let _ = sqlx::query(
+                        r#"INSERT INTO wallet_transactions (id, user_id, amount, balance_after, description, reference_id, created_at)
+                        VALUES ($1, $2, $3, (SELECT wallet_balance FROM users WHERE id = $2), $4, $5, NOW())"#,
+                    )
+                    .bind(uuid::Uuid::new_v4())
+                    .bind(host_id)
+                    .bind(payout)
+                    .bind(format!("Auto-payout for booking {}", booking_id))
+                    .bind(booking_id)
+                    .execute(&pool)
+                    .await;
+
+                    // Notify renter
+                    let _ = sqlx::query(
+                        r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, data, created_at)
+                        VALUES ($1, (SELECT renter_id FROM bookings WHERE id = $2), 'Trip Completed',
+                        'Your trip has been auto-completed. Leave a review!', 'booking_completed', false, $3, NOW())"#,
+                    )
+                    .bind(uuid::Uuid::new_v4())
+                    .bind(booking_id)
+                    .bind(serde_json::json!({"booking_id": booking_id.to_string()}))
+                    .execute(&pool)
+                    .await;
+                }
+                if !bookings.is_empty() {
+                    log::info!("Auto-completed {} overdue booking(s)", bookings.len());
+                }
+            }
+            Err(e) => log::error!("Auto-complete query failed: {}", e),
+        }
+    }
+}
 
 async fn auth_mw(
     req: ServiceRequest,
@@ -48,6 +119,10 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("Qent API starting on {}", bind_addr);
 
+    // Spawn background auto-completion task
+    let bg_pool = pool.clone();
+    tokio::spawn(auto_complete_bookings(bg_pool));
+
     // Rate limiter configs
     // Auth: 10 requests per minute per IP
     let auth_rate_limit = GovernorConfigBuilder::default()
@@ -69,6 +144,9 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("http://127.0.0.1:3000")
             .allowed_origin("http://localhost:8080")
             .allowed_origin("http://10.0.2.2:8080") // Android emulator
+            .allowed_origin("https://qent.online")
+            .allowed_origin("https://www.qent.online")
+            .allowed_origin("https://qent.netlify.app") // Netlify default domain
             .allow_any_method()
             .allow_any_header()
             .max_age(3600);
@@ -86,11 +164,15 @@ async fn main() -> std::io::Result<()> {
                             .wrap(Governor::new(&auth_rate_limit))
                             .route("/signup", web::post().to(handlers::auth::sign_up))
                             .route("/signin", web::post().to(handlers::auth::sign_in))
+                            .route("/refresh", web::post().to(handlers::auth::refresh_token))
+                            .route("/forgot-password", web::post().to(handlers::auth::forgot_password))
+                            .route("/reset-password", web::post().to(handlers::auth::reset_password))
                             .route("/send-code", web::post().to(handlers::verification::send_code))
                             .route("/verify-code", web::post().to(handlers::verification::verify_code))
                     )
                     // Cars - public
                     .route("/cars/search", web::get().to(handlers::cars::search_cars))
+                    .route("/cars/homepage", web::get().to(handlers::cars::get_homepage))
                     .route("/cars/{id}/view", web::post().to(handlers::dashboard::increment_view))
                     .route("/cars/{id}", web::get().to(handlers::cars::get_car))
                     // Protection plans - public
@@ -102,6 +184,9 @@ async fn main() -> std::io::Result<()> {
                     // Banks - public (for withdrawal form)
                     .route("/payments/banks", web::get().to(handlers::payments::list_banks))
                     .route("/payments/verify-account", web::post().to(handlers::payments::verify_bank_account))
+                    // Waitlist - public
+                    .route("/waitlist", web::post().to(handlers::waitlist::join_waitlist))
+                    .route("/waitlist/count", web::get().to(handlers::waitlist::waitlist_count))
                     // Paystack webhook - no auth
                     .route("/payments/webhook", web::post().to(handlers::payments::paystack_webhook))
                     // Authenticated routes
@@ -170,6 +255,15 @@ async fn main() -> std::io::Result<()> {
                             .route("/chat/conversations/{id}/messages", web::post().to(handlers::chat::send_message))
                             .route("/chat/conversations/{id}/read", web::post().to(handlers::chat::mark_read))
                             .route("/chat/conversations/{id}", web::delete().to(handlers::chat::delete_conversation))
+                            // Compliance & Account
+                            .route("/auth/accept-terms", web::post().to(handlers::compliance::accept_terms))
+                            .route("/auth/terms-status", web::get().to(handlers::compliance::terms_status))
+                            .route("/account/request-deletion", web::post().to(handlers::compliance::request_deletion))
+                            .route("/account/cancel-deletion", web::post().to(handlers::compliance::cancel_deletion))
+                            .route("/account/export", web::get().to(handlers::compliance::export_data))
+                            // Damage Reports
+                            .route("/damage-reports", web::post().to(handlers::damage_reports::create_report))
+                            .route("/damage-reports/{id}", web::get().to(handlers::damage_reports::get_reports))
                             // Admin
                             .route("/admin/users", web::get().to(handlers::admin::list_users))
                             .route("/admin/users/{id}/verify", web::post().to(handlers::admin::verify_user))
@@ -182,6 +276,10 @@ async fn main() -> std::io::Result<()> {
                             .route("/admin/bookings/{id}/dispute-refund", web::post().to(handlers::admin::handle_dispute_refund))
                             .route("/admin/payments", web::get().to(handlers::admin::list_all_payments))
                             .route("/admin/analytics", web::get().to(handlers::admin::get_analytics))
+                            .route("/admin/audit-log", web::get().to(handlers::compliance::admin_audit_log))
+                            .route("/admin/withdrawals/pending", web::get().to(handlers::admin::list_pending_withdrawals))
+                            .route("/admin/withdrawals/{id}/approve", web::post().to(handlers::admin::approve_withdrawal))
+                            .route("/admin/withdrawals/{id}/reject", web::post().to(handlers::admin::reject_withdrawal))
                     ),
             )
     })

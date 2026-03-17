@@ -338,6 +338,40 @@ pub async fn withdraw(
             .json(serde_json::json!({"error": "Insufficient wallet balance", "balance": balance}));
     }
 
+    // Large withdrawals (> ₦100,000) require admin approval
+    if body.amount > 100_000.0 {
+        // Debit wallet immediately (hold funds)
+        let _ = sqlx::query(
+            "UPDATE users SET wallet_balance = wallet_balance - $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(body.amount)
+        .bind(claims.sub)
+        .execute(pool.get_ref())
+        .await;
+
+        // Record as pending withdrawal
+        let _ = sqlx::query(
+            r#"INSERT INTO wallet_transactions (id, user_id, amount, balance_after, description, status, created_at)
+            VALUES ($1, $2, $3, (SELECT wallet_balance FROM users WHERE id = $2), $4, 'pending_approval', NOW())"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(claims.sub)
+        .bind(-body.amount)
+        .bind(format!(
+            "Withdrawal to ****{} (pending approval)",
+            &body.account_number[body.account_number.len().saturating_sub(4)..]
+        ))
+        .execute(pool.get_ref())
+        .await;
+
+        return HttpResponse::Ok().json(serde_json::json!({
+            "message": "Withdrawal request submitted for approval",
+            "amount": body.amount,
+            "status": "pending_approval",
+            "note": "Withdrawals over ₦100,000 require admin approval"
+        }));
+    }
+
     // Step 1: Create a Paystack transfer recipient
     let client = reqwest::Client::new();
     let recipient_resp = client

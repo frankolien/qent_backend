@@ -3,6 +3,33 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct DamageReport {
+    pub id: Uuid,
+    pub booking_id: Uuid,
+    pub reporter_id: Uuid,
+    pub reporter_role: String,
+    pub photos: Vec<String>,
+    pub notes: Option<String>,
+    pub odometer_reading: Option<i32>,
+    pub fuel_level: Option<String>,
+    pub exterior_condition: String,
+    pub interior_condition: String,
+    pub confirmed: bool,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDamageReportRequest {
+    pub booking_id: Uuid,
+    pub photos: Vec<String>,
+    pub notes: Option<String>,
+    pub odometer_reading: Option<i32>,
+    pub fuel_level: Option<String>,
+    pub exterior_condition: Option<String>,
+    pub interior_condition: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "payment_status", rename_all = "lowercase")]
 pub enum PaymentStatus {
@@ -112,5 +139,7 @@ pub struct WalletTransaction {
     pub balance_after: f64,
     pub description: String,
     pub reference_id: Option<Uuid>,
+    pub status: String,
+    pub admin_notes: Option<String>,
     pub created_at: NaiveDateTime,
 }
