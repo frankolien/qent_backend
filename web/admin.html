@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qent Admin Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --black: #1A1A1A; --bg: #F5F5F5; --card: #FFFFFF; --border: #EEEEEE; --gray: #999; --green: #2E7D32; --red: #C62828; --orange: #E65100; --blue: #1565C0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--black); -webkit-font-smoothing: antialiased; }
+
+    /* Login overlay */
+    #loginOverlay { position: fixed; inset: 0; background: white; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .login-box { width: 360px; text-align: center; }
+    .login-box h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    .login-box p { color: var(--gray); font-size: 14px; margin-bottom: 32px; }
+    .login-box input { width: 100%; padding: 14px 18px; border: 2px solid var(--border); border-radius: 14px; font-size: 14px; font-family: inherit; outline: none; margin-bottom: 12px; background: var(--bg); }
+    .login-box input:focus { border-color: var(--black); background: white; }
+    .login-box button { width: 100%; padding: 14px; background: var(--black); color: white; border: none; border-radius: 14px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .login-box button:hover { opacity: 0.9; }
+    .login-error { color: var(--red); font-size: 13px; margin-bottom: 12px; display: none; }
+
+    /* Layout */
+    .app { display: flex; min-height: 100vh; }
+    .sidebar { width: 240px; background: var(--black); color: white; padding: 24px 0; position: fixed; top: 0; bottom: 0; overflow-y: auto; }
+    .sidebar-logo { padding: 0 24px 24px; font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+    .sidebar-logo span { width: 32px; height: 32px; background: white; color: var(--black); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; }
+    .nav-section { padding: 0 12px; margin-bottom: 16px; }
+    .nav-section-label { padding: 8px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.3); font-weight: 600; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.6); transition: all 0.2s; }
+    .nav-item:hover { background: rgba(255,255,255,0.08); color: white; }
+    .nav-item.active { background: rgba(255,255,255,0.12); color: white; font-weight: 600; }
+    .nav-item svg { width: 18px; height: 18px; opacity: 0.7; }
+    .main { margin-left: 240px; flex: 1; padding: 24px; }
+
+    /* Header */
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .header h1 { font-size: 24px; font-weight: 800; }
+    .header-actions { display: flex; gap: 10px; }
+    .btn { padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; }
+    .btn-primary { background: var(--black); color: white; }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-outline { background: white; color: var(--black); border: 1px solid var(--border); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 8px; }
+    .btn-green { background: var(--green); color: white; }
+    .btn-red { background: var(--red); color: white; }
+    .btn-orange { background: var(--orange); color: white; }
+
+    /* Stats grid */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--card); border-radius: 16px; padding: 20px; }
+    .stat-card .label { font-size: 12px; color: var(--gray); font-weight: 500; margin-bottom: 8px; }
+    .stat-card .value { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+    .stat-card .sub { font-size: 12px; color: var(--gray); margin-top: 4px; }
+    .stat-card.dark { background: var(--black); color: white; }
+    .stat-card.dark .label { color: rgba(255,255,255,0.5); }
+    .stat-card.dark .sub { color: rgba(255,255,255,0.4); }
+
+    /* Charts */
+    .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-card { background: var(--card); border-radius: 16px; padding: 20px; }
+    .chart-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+
+    /* Table */
+    .table-card { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 24px; }
+    .table-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .table-search { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none; font-family: inherit; width: 240px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    td { padding: 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg); }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #E8F5E9; color: var(--green); }
+    .badge-orange { background: #FFF3E0; color: var(--orange); }
+    .badge-red { background: #FFEBEE; color: var(--red); }
+    .badge-blue { background: #E3F2FD; color: var(--blue); }
+    .badge-gray { background: #F5F5F5; color: #616161; }
+
+    /* Sections */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* Avatar */
+    .avatar { width: 32px; height: 32px; border-radius: 10px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--black); }
+    .avatar img { width: 100%; height: 100%; border-radius: 10px; object-fit: cover; }
+
+    /* Toast */
+    .toast { position: fixed; top: 20px; right: 20px; padding: 14px 20px; border-radius: 12px; color: white; font-size: 14px; font-weight: 600; z-index: 999; animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Responsive */
+    @media (max-width: 1024px) { .stats { grid-template-columns: repeat(2, 1fr); } .charts { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) { .sidebar { display: none; } .main { margin-left: 0; } }
+
+    .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--gray); }
+    .empty { text-align: center; padding: 40px; color: var(--gray); font-size: 14px; }
+    .photo-thumb { width: 48px; height: 36px; border-radius: 8px; object-fit: cover; background: var(--bg); }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay">
+  <div class="login-box">
+    <div style="font-size:36px;margin-bottom:16px">Q</div>
+    <h1>Admin Dashboard</h1>
+    <p>Sign in with your admin account</p>
+    <div class="login-error" id="loginError">Invalid credentials</div>
+    <input type="email" id="loginEmail" placeholder="Email" value="">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button onclick="handleLogin()">Sign In</button>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app" style="display:none">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo"><span>Q</span> Qent</div>
+    <div class="nav-section">
+      <div class="nav-section-label">Overview</div>
+      <div class="nav-item active" onclick="showSection('overview', this)">&#128202; Dashboard</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Manage</div>
+      <div class="nav-item" onclick="showSection('cars', this)">&#128663; Cars</div>
+      <div class="nav-item" onclick="showSection('users', this)">&#128100; Users</div>
+      <div class="nav-item" onclick="showSection('bookings', this)">&#128203; Bookings</div>
+      <div class="nav-item" onclick="showSection('payments', this)">&#128179; Payments</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Actions</div>
+      <div class="nav-item" onclick="showSection('pending', this)">&#9202; Pending Approvals</div>
+      <div class="nav-item" onclick="showSection('withdrawals', this)">&#128176; Withdrawals</div>
+    </div>
+    <div class="nav-section" style="margin-top:auto;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)">
+      <div class="nav-item" onclick="logout()">&#128682; Logout</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Overview -->
+    <div class="section active" id="sec-overview">
+      <div class="header"><h1>Dashboard</h1><div class="header-actions"><button class="btn btn-outline" onclick="refreshAll()">&#8635; Refresh</button></div></div>
+      <div class="stats" id="statsGrid"></div>
+      <div class="charts">
+        <div class="chart-card"><h3>Bookings This Week</h3><canvas id="bookingsChart" height="100"></canvas></div>
+        <div class="chart-card"><h3>User Roles</h3><canvas id="rolesChart" height="200"></canvas></div>
+      </div>
+      <div class="table-card"><h3>Recent Activity</h3><div id="recentActivity" class="loading">Loading...</div></div>
+    </div>
+
+    <!-- Cars -->
+    <div class="section" id="sec-cars">
+      <div class="header"><h1>All Cars</h1></div>
+      <div class="table-card">
+        <div class="table-header">
+          <input class="table-search" placeholder="Search cars..." oninput="filterTable('carsTable', this.value)">
+        </div>
+        <div id="carsTableWrap" class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div class="section" id="sec-users">
+      <div class="header"><h1>All Users</h1></div>
+      <div class="table-card">
+        <div class="table-header">
+          <input class="table-search" placeholder="Search users..." oninput="filterTable('usersTable', this.value)">
+        </div>
+        <div id="usersTableWrap" class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Bookings -->
+    <div class="section" id="sec-bookings">
+      <div class="header"><h1>All Bookings</h1></div>
+      <div class="table-card"><div id="bookingsTableWrap" class="loading">Loading...</div></div>
+    </div>
+
+    <!-- Payments -->
+    <div class="section" id="sec-payments">
+      <div class="header"><h1>All Payments</h1></div>
+      <div class="table-card"><div id="paymentsTableWrap" class="loading">Loading...</div></div>
+    </div>
+
+    <!-- Pending Approvals -->
+    <div class="section" id="sec-pending">
+      <div class="header"><h1>Pending Car Approvals</h1></div>
+      <div class="table-card"><div id="pendingTableWrap" class="loading">Loading...</div></div>
+    </div>
+
+    <!-- Withdrawals -->
+    <div class="section" id="sec-withdrawals">
+      <div class="header"><h1>Pending Withdrawals</h1></div>
+      <div class="table-card"><div id="withdrawalsTableWrap" class="loading">Loading...</div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://127.0.0.1:8080/api' : 'https://qent-backend.onrender.com/api';
+
+let TOKEN = localStorage.getItem('admin_token') || '';
+
+// ─── Auth ───────────────────────────────
+async function handleLogin() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+
+  try {
+    const resp = await fetch(`${API}/auth/signin`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email, password})
+    });
+    const data = await resp.json();
+    if (resp.ok && data.token) {
+      TOKEN = data.token;
+      localStorage.setItem('admin_token', TOKEN);
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      loadAll();
+    } else {
+      errEl.textContent = data.error || 'Invalid credentials';
+      errEl.style.display = 'block';
+    }
+  } catch(e) { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
+}
+
+function logout() {
+  TOKEN = '';
+  localStorage.removeItem('admin_token');
+  location.reload();
+}
+
+// Auto-login if token exists
+if (TOKEN) {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  loadAll();
+}
+
+// ─── API helpers ────────────────────────
+async function api(path, method = 'GET', body = null) {
+  const opts = { method, headers: {'Content-Type':'application/json', 'Authorization':`Bearer ${TOKEN}`} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(`${API}${path}`, opts);
+  return r.json();
+}
+
+// ─── Navigation ─────────────────────────
+function showSection(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`sec-${id}`).classList.add('active');
+  if (el) el.classList.add('active');
+  // Load data for section
+  if (id === 'cars') loadCars();
+  if (id === 'users') loadUsers();
+  if (id === 'bookings') loadBookings();
+  if (id === 'payments') loadPayments();
+  if (id === 'pending') loadPending();
+  if (id === 'withdrawals') loadWithdrawals();
+}
+
+// ─── Load all ───────────────────────────
+function loadAll() { loadAnalytics(); loadCars(); loadUsers(); }
+function refreshAll() { loadAll(); toast('Refreshed', 'green'); }
+
+// ─── Analytics ──────────────────────────
+async function loadAnalytics() {
+  try {
+    const data = await api('/admin/analytics');
+    const fmt = n => n >= 1000 ? (n/1000).toFixed(n%1000===0?0:1)+'k' : n;
+    const fmtN = n => new Intl.NumberFormat().format(n);
+
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-card dark"><div class="label">Total Revenue</div><div class="value">\u20a6${fmtN(Math.round(data.total_revenue||0))}</div><div class="sub">All time</div></div>
+      <div class="stat-card"><div class="label">Total Users</div><div class="value">${fmt(data.total_users||0)}</div><div class="sub">Registered accounts</div></div>
+      <div class="stat-card"><div class="label">Total Cars</div><div class="value">${fmt(data.total_cars||0)}</div><div class="sub">Listed vehicles</div></div>
+      <div class="stat-card"><div class="label">Active Bookings</div><div class="value">${data.active_bookings||0}</div><div class="sub">${data.pending_car_approvals||0} pending approvals</div></div>
+    `;
+
+    // Roles chart
+    const users = await api('/admin/users').catch(() => []);
+    if (Array.isArray(users)) {
+      const roles = {};
+      users.forEach(u => { const r = u.role || 'Renter'; roles[r] = (roles[r]||0)+1; });
+      renderRolesChart(roles);
+      renderRecentActivity(users);
+    }
+    renderBookingsChart();
+  } catch(e) { console.error('Analytics error:', e); }
+}
+
+let bookingsChartInstance = null;
+function renderBookingsChart() {
+  const ctx = document.getElementById('bookingsChart');
+  if (bookingsChartInstance) bookingsChartInstance.destroy();
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  bookingsChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: days, datasets: [{ label: 'Bookings', data: [3,5,2,8,4,6,1], backgroundColor: '#1A1A1A', borderRadius: 6 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } }
+  });
+}
+
+let rolesChartInstance = null;
+function renderRolesChart(roles) {
+  const ctx = document.getElementById('rolesChart');
+  if (rolesChartInstance) rolesChartInstance.destroy();
+  const colors = { Admin: '#1A1A1A', Host: '#2E7D32', Renter: '#999' };
+  rolesChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: Object.keys(roles), datasets: [{ data: Object.values(roles), backgroundColor: Object.keys(roles).map(r => colors[r]||'#ccc'), borderWidth: 0 }] },
+    options: { responsive: true, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { padding: 16, font: { size: 12, weight: 600 } } } } }
+  });
+}
+
+function renderRecentActivity(users) {
+  const recent = users.slice(0, 8);
+  if (!recent.length) { document.getElementById('recentActivity').innerHTML = '<div class="empty">No activity</div>'; return; }
+  let html = '<table><th>User</th><th>Email</th><th>Role</th><th>Joined</th>';
+  recent.forEach(u => {
+    const date = new Date(u.created_at).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+    const badge = badgeClass(u.role);
+    html += `<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="avatar">${(u.full_name||'?')[0]}</div><b>${u.full_name||'Unknown'}</b></div></td><td>${u.email||''}</td><td><span class="badge ${badge}">${u.role||'Renter'}</span></td><td>${date}</td></tr>`;
+  });
+  html += '</table>';
+  document.getElementById('recentActivity').innerHTML = html;
+}
+
+// ─── Cars ───────────────────────────────
+async function loadCars() {
+  try {
+    const cars = await api('/admin/cars');
+    if (!Array.isArray(cars)) { document.getElementById('carsTableWrap').innerHTML = `<div class="empty">${cars.error||'Failed to load'}</div>`; return; }
+    let html = '<table id="carsTable"><th>Car</th><th>Host</th><th>Price/Day</th><th>Status</th><th>Actions</th>';
+    cars.forEach(c => {
+      const photo = c.photos?.[0] ? `<img class="photo-thumb" src="${c.photos[0]}" onerror="this.style.display='none'">` : '';
+      const status = (c.status||'').toLowerCase();
+      const badge = status === 'active' ? 'badge-green' : status.includes('pending') ? 'badge-orange' : status === 'rejected' ? 'badge-red' : 'badge-gray';
+      const statusLabel = status === 'pendingapproval' ? 'Pending' : status.charAt(0).toUpperCase()+status.slice(1);
+      let actions = '';
+      if (status.includes('pending')) {
+        actions = `<button class="btn btn-sm btn-green" onclick="approveCar('${c.id}')">Approve</button> <button class="btn btn-sm btn-red" onclick="rejectCar('${c.id}')">Reject</button>`;
+      } else if (status === 'active') {
+        actions = `<button class="btn btn-sm btn-outline" onclick="rejectCar('${c.id}')">Deactivate</button>`;
+      }
+      html += `<tr><td><div style="display:flex;align-items:center;gap:10px">${photo}<div><b>${c.make} ${c.model}</b><br><span style="color:var(--gray);font-size:11px">${c.year} &bull; ${c.color}</span></div></div></td><td>${c.host_name||'Unknown'}</td><td>\u20a6${Number(c.price_per_day).toLocaleString()}</td><td><span class="badge ${badge}">${statusLabel}</span></td><td>${actions}</td></tr>`;
+    });
+    html += '</table>';
+    document.getElementById('carsTableWrap').innerHTML = html;
+
+    // Also update pending
+    const pending = cars.filter(c => (c.status||'').toLowerCase().includes('pending'));
+    loadPendingFromData(pending);
+  } catch(e) { document.getElementById('carsTableWrap').innerHTML = '<div class="empty">Failed to load cars</div>'; }
+}
+
+async function approveCar(id) {
+  await api(`/admin/cars/${id}/approve`, 'POST');
+  toast('Car approved!', '#2E7D32');
+  loadCars(); loadAnalytics();
+}
+async function rejectCar(id) {
+  await api(`/admin/cars/${id}/reject`, 'POST');
+  toast('Car rejected', '#C62828');
+  loadCars();
+}
+
+function loadPendingFromData(pending) {
+  if (!pending.length) { document.getElementById('pendingTableWrap').innerHTML = '<div class="empty">No pending approvals</div>'; return; }
+  let html = '<table><th>Car</th><th>Host</th><th>Price</th><th>Actions</th>';
+  pending.forEach(c => {
+    const photo = c.photos?.[0] ? `<img class="photo-thumb" src="${c.photos[0]}" onerror="this.style.display='none'">` : '';
+    html += `<tr><td><div style="display:flex;align-items:center;gap:10px">${photo}<b>${c.make} ${c.model} ${c.year}</b></div></td><td>${c.host_name||'Unknown'}</td><td>\u20a6${Number(c.price_per_day).toLocaleString()}</td><td><button class="btn btn-sm btn-green" onclick="approveCar('${c.id}')">Approve</button> <button class="btn btn-sm btn-red" onclick="rejectCar('${c.id}')">Reject</button></td></tr>`;
+  });
+  html += '</table>';
+  document.getElementById('pendingTableWrap').innerHTML = html;
+}
+async function loadPending() { loadCars(); }
+
+// ─── Users ──────────────────────────────
+async function loadUsers() {
+  try {
+    const users = await api('/admin/users');
+    if (!Array.isArray(users)) { document.getElementById('usersTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+    let html = '<table id="usersTable"><th>User</th><th>Email</th><th>Role</th><th>Verified</th><th>Balance</th><th>Actions</th>';
+    users.forEach(u => {
+      const vStatus = (u.verification_status||'Pending').toLowerCase();
+      const vBadge = vStatus === 'verified' ? 'badge-green' : vStatus === 'rejected' ? 'badge-red' : 'badge-orange';
+      const roleBadge = badgeClass(u.role);
+      let actions = '';
+      if (vStatus === 'pending') actions = `<button class="btn btn-sm btn-green" onclick="verifyUser('${u.id}')">Verify</button>`;
+      if (u.is_active) actions += ` <button class="btn btn-sm btn-outline" onclick="deactivateUser('${u.id}')">Deactivate</button>`;
+      html += `<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="avatar">${(u.full_name||'?')[0]}</div><b>${u.full_name||'Unknown'}</b></div></td><td>${u.email||''}</td><td><span class="badge ${roleBadge}">${u.role||'Renter'}</span></td><td><span class="badge ${vBadge}">${vStatus.charAt(0).toUpperCase()+vStatus.slice(1)}</span></td><td>\u20a6${Number(u.wallet_balance||0).toLocaleString()}</td><td>${actions}</td></tr>`;
+    });
+    html += '</table>';
+    document.getElementById('usersTableWrap').innerHTML = html;
+  } catch(e) { document.getElementById('usersTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; }
+}
+
+async function verifyUser(id) { await api(`/admin/users/${id}/verify`, 'POST'); toast('User verified!', '#2E7D32'); loadUsers(); }
+async function deactivateUser(id) { await api(`/admin/users/${id}/deactivate`, 'POST'); toast('User deactivated', '#C62828'); loadUsers(); }
+
+// ─── Bookings ───────────────────────────
+async function loadBookings() {
+  try {
+    const bookings = await api('/admin/bookings');
+    if (!Array.isArray(bookings)) { document.getElementById('bookingsTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+    let html = '<table><th>ID</th><th>Car</th><th>Dates</th><th>Amount</th><th>Status</th>';
+    bookings.forEach(b => {
+      const status = (b.status||'').toLowerCase();
+      const badge = status === 'completed' ? 'badge-gray' : status === 'active' ? 'badge-green' : status === 'confirmed' ? 'badge-green' : status === 'pending' ? 'badge-orange' : status === 'cancelled' || status === 'rejected' ? 'badge-red' : 'badge-blue';
+      const statusLabel = status === 'pendingapproval' ? 'Pending' : status.charAt(0).toUpperCase()+status.slice(1);
+      html += `<tr><td style="font-family:monospace;font-size:12px">${(b.id||'').substring(0,8)}</td><td>${(b.car_id||'').substring(0,8)}</td><td>${b.start_date||''} &rarr; ${b.end_date||''}</td><td>\u20a6${Number(b.total_amount||0).toLocaleString()}</td><td><span class="badge ${badge}">${statusLabel}</span></td></tr>`;
+    });
+    html += '</table>';
+    document.getElementById('bookingsTableWrap').innerHTML = html;
+  } catch(e) { document.getElementById('bookingsTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; }
+}
+
+// ─── Payments ───────────────────────────
+async function loadPayments() {
+  try {
+    const payments = await api('/admin/payments');
+    if (!Array.isArray(payments)) { document.getElementById('paymentsTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+    let html = '<table><th>Ref</th><th>Amount</th><th>Type</th><th>Status</th><th>Date</th>';
+    payments.forEach(p => {
+      const status = (p.status||'').toLowerCase();
+      const badge = status === 'success' ? 'badge-green' : status === 'pending' ? 'badge-orange' : 'badge-red';
+      html += `<tr><td style="font-family:monospace;font-size:12px">${(p.provider_reference||p.id||'').substring(0,12)}</td><td>\u20a6${Number(p.amount||0).toLocaleString()}</td><td><span class="badge badge-gray">${p.transaction_type||'payment'}</span></td><td><span class="badge ${badge}">${status.charAt(0).toUpperCase()+status.slice(1)}</span></td><td>${new Date(p.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</td></tr>`;
+    });
+    html += '</table>';
+    document.getElementById('paymentsTableWrap').innerHTML = html;
+  } catch(e) { document.getElementById('paymentsTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; }
+}
+
+// ─── Withdrawals ────────────────────────
+async function loadWithdrawals() {
+  try {
+    const txns = await api('/admin/withdrawals/pending');
+    if (!Array.isArray(txns) || !txns.length) { document.getElementById('withdrawalsTableWrap').innerHTML = '<div class="empty">No pending withdrawals</div>'; return; }
+    let html = '<table><th>User</th><th>Amount</th><th>Description</th><th>Date</th><th>Actions</th>';
+    txns.forEach(t => {
+      html += `<tr><td style="font-family:monospace;font-size:12px">${(t.user_id||'').substring(0,8)}</td><td>\u20a6${Number(Math.abs(t.amount||0)).toLocaleString()}</td><td>${t.description||''}</td><td>${new Date(t.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</td><td><button class="btn btn-sm btn-green" onclick="approveWithdrawal('${t.id}')">Approve</button> <button class="btn btn-sm btn-red" onclick="rejectWithdrawal('${t.id}')">Reject</button></td></tr>`;
+    });
+    html += '</table>';
+    document.getElementById('withdrawalsTableWrap').innerHTML = html;
+  } catch(e) { document.getElementById('withdrawalsTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; }
+}
+
+async function approveWithdrawal(id) { await api(`/admin/withdrawals/${id}/approve`, 'POST'); toast('Withdrawal approved', '#2E7D32'); loadWithdrawals(); }
+async function rejectWithdrawal(id) { await api(`/admin/withdrawals/${id}/reject`, 'POST'); toast('Withdrawal rejected, funds returned', '#C62828'); loadWithdrawals(); }
+
+// ─── Utils ──────────────────────────────
+function badgeClass(role) {
+  return role === 'Admin' ? 'badge-blue' : role === 'Host' ? 'badge-green' : 'badge-gray';
+}
+
+function filterTable(tableId, query) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const rows = table.querySelectorAll('tr');
+  const q = query.toLowerCase();
+  rows.forEach((row, i) => {
+    if (i === 0) return; // header
+    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function toast(msg, color = '#1A1A1A') {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.style.background = color;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+</script>
+</body>
+</html>

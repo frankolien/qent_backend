@@ -42,8 +42,19 @@ pub async fn list_all_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     }
 
     let result = sqlx::query_as::<_, Car>(
-        r#"SELECT c.*, u.full_name as host_name
+        r#"SELECT c.*,
+            COALESCE(rs.avg_rating, 0.0) as rating,
+            COALESCE(rs.trip_count, 0) as trip_count,
+            u.full_name as host_name
         FROM cars c
+        LEFT JOIN (
+            SELECT b.car_id,
+                   AVG(r.rating)::double precision as avg_rating,
+                   COUNT(DISTINCT b.id) as trip_count
+            FROM reviews r
+            JOIN bookings b ON r.booking_id = b.id
+            GROUP BY b.car_id
+        ) rs ON rs.car_id = c.id
         LEFT JOIN users u ON u.id = c.host_id
         ORDER BY c.created_at DESC"#,
     )
