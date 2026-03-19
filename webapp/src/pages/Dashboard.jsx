@@ -30,11 +30,11 @@ export default function Dashboard() {
   const [acting, setActing] = useState(null);
   const [error, setError] = useState('');
 
-  const isHost = user?.role === 'host' || user?.is_host;
+  const isHost = user?.role === 'Host' || user?.role === 'host' || user?.role === 'Admin' || user?.is_host;
 
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
-    if (!isHost) { navigate('/profile'); return; }
+    // Non-hosts can still view dashboard but will see empty state
 
     const load = async () => {
       try {
@@ -47,9 +47,9 @@ export default function Dashboard() {
           const all = bookRes.value.data || [];
           // Filter bookings where user is host
           const asHost = all.filter(b => b.host_id === user.id || b.car?.host_id === user.id);
-          const pending = asHost.filter(b => b.status === 'pending_approval');
+          const pending = asHost.filter(b => b.status === 'pending');
           setPendingBookings(pending);
-          const bookingCount = asHost.filter(b => ['completed', 'active', 'awaiting_pickup'].includes(b.status)).length;
+          const bookingCount = asHost.filter(b => ['completed', 'active', 'confirmed'].includes(b.status)).length;
           setStats(s => ({ ...s, bookings: bookingCount, active: asHost.filter(b => b.status === 'active').length }));
         }
 
@@ -199,9 +199,8 @@ export default function Dashboard() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {pendingBookings.map((b, i) => {
-                const car = b.car || {};
-                const photo = car.photos?.[0] || '';
-                const name = car.make ? `${car.make} ${car.model} ${car.year}` : 'Car';
+                const photo = b.car_photo || '';
+                const name = b.car_name || 'Car';
                 return (
                   <motion.div
                     key={b.id}
@@ -251,7 +250,7 @@ export default function Dashboard() {
                         {acting === b.id + 'approve' ? 'Approving…' : 'Approve'}
                       </button>
                       <button
-                        onClick={() => handleAction(b.id, 'decline')}
+                        onClick={() => handleAction(b.id, 'reject')}
                         disabled={!!acting}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 5,
@@ -263,7 +262,7 @@ export default function Dashboard() {
                         }}
                       >
                         <X size={14} />
-                        {acting === b.id + 'decline' ? 'Declining…' : 'Decline'}
+                        {acting === b.id + 'reject' ? 'Declining…' : 'Decline'}
                       </button>
                     </div>
                   </motion.div>

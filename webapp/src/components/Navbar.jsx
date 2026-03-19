@@ -41,7 +41,13 @@ export default function Navbar() {
         <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
           <NavLink href="#cars" active={isHome}>Browse</NavLink>
           <NavLink href="#how-it-works">How it works</NavLink>
-          <NavLink href="#host">Become a host</NavLink>
+          {user ? (
+            <Link to="/dashboard" style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.5)', transition: 'color 0.2s', cursor: 'pointer', textDecoration: 'none' }}>
+              Partnership
+            </Link>
+          ) : (
+            <NavLink href="#host">Become a host</NavLink>
+          )}
         </div>
 
         {/* Right */}
@@ -82,13 +88,19 @@ export default function Navbar() {
 }
 
 function NavLink({ href, active, children }) {
+  const navigate = useNavigate();
   const handleClick = (e) => {
     e.preventDefault();
     const el = document.querySelector(href);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     } else {
-      window.location.href = '/' + href;
+      // Use React Router to navigate without full page reload
+      navigate('/');
+      setTimeout(() => {
+        const target = document.querySelector(href);
+        if (target) target.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
   };
 
