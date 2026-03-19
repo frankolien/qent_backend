@@ -15,6 +15,7 @@ import ChatDetail from './pages/ChatDetail';
 import Profile from './pages/Profile';
 import Dashboard from './pages/Dashboard';
 import WalletPage from './pages/WalletPage';
+import LeaveReview from './pages/LeaveReview';
 
 // Pages that use their own full-height layout (no navbar overlap concern)
 const FULLSCREEN_ROUTES = ['/messages/'];
@@ -69,6 +70,7 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/review" element={<LeaveReview />} />
           </Routes>
         </div>
       </BrowserRouter>

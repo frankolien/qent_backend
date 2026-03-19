@@ -5,27 +5,27 @@ import {
   Car, Calendar, ChevronDown, ChevronUp, MessageSquare,
   X, Clock, CheckCircle, AlertCircle, XCircle, Ban, ArrowLeft,
 } from 'lucide-react';
-import { getMyBookings, bookingAction } from '../utils/api';
+import api, { getMyBookings, bookingAction } from '../utils/api';
 import { useAuth } from '../hooks/useAuth';
 
 const TABS = ['All', 'Active', 'Completed', 'Cancelled'];
 
 const STATUS_META = {
-  pending_approval:  { label: 'Pending Approval',  color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  icon: Clock },
-  ready_to_pay:      { label: 'Ready to Pay',       color: '#3B82F6', bg: 'rgba(59,130,246,0.12)', icon: AlertCircle },
-  awaiting_pickup:   { label: 'Awaiting Pickup',    color: '#22C55E', bg: 'rgba(34,197,94,0.12)',  icon: Clock },
-  active:            { label: 'Trip Active',         color: '#22C55E', bg: 'rgba(34,197,94,0.12)',  icon: CheckCircle },
-  completed:         { label: 'Completed',           color: '#6B7280', bg: 'rgba(107,114,128,0.12)',icon: CheckCircle },
-  cancelled:         { label: 'Cancelled',           color: '#EF4444', bg: 'rgba(239,68,68,0.12)', icon: XCircle },
-  declined:          { label: 'Declined by Host',    color: '#EF4444', bg: 'rgba(239,68,68,0.12)', icon: Ban },
+  pending:    { label: 'Pending Approval',  color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  icon: Clock },
+  approved:   { label: 'Ready to Pay',      color: '#3B82F6', bg: 'rgba(59,130,246,0.12)',  icon: AlertCircle },
+  confirmed:  { label: 'Awaiting Pickup',   color: '#22C55E', bg: 'rgba(34,197,94,0.12)',   icon: Clock },
+  active:     { label: 'Trip Active',       color: '#22C55E', bg: 'rgba(34,197,94,0.12)',   icon: CheckCircle },
+  completed:  { label: 'Completed',         color: '#6B7280', bg: 'rgba(107,114,128,0.12)', icon: CheckCircle },
+  cancelled:  { label: 'Cancelled',         color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   icon: XCircle },
+  rejected:   { label: 'Declined by Host',  color: '#EF4444', bg: 'rgba(239,68,68,0.12)',   icon: Ban },
 };
 
 function belongs(booking, tab) {
   const s = booking.status;
   if (tab === 'All') return true;
-  if (tab === 'Active') return ['pending_approval', 'ready_to_pay', 'awaiting_pickup', 'active'].includes(s);
+  if (tab === 'Active') return ['pending', 'approved', 'confirmed', 'active'].includes(s);
   if (tab === 'Completed') return s === 'completed';
-  if (tab === 'Cancelled') return s === 'cancelled' || s === 'declined';
+  if (tab === 'Cancelled') return s === 'cancelled' || s === 'rejected';
   return true;
 }
 
@@ -64,6 +64,22 @@ export default function Trips() {
       setBookings(r.data || []);
     } catch (e) {
       setError(e.response?.data?.error || 'Action failed');
+    }
+    setActing(null);
+  };
+
+  const handlePay = async (bookingId) => {
+    setActing(bookingId + 'pay');
+    try {
+      const res = await api.post('/payments/initiate', { booking_id: bookingId });
+      const url = res.data?.authorization_url;
+      if (url) {
+        window.location.href = url;
+      } else {
+        setError('Could not get payment link. Please try again.');
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || 'Payment failed');
     }
     setActing(null);
   };
@@ -124,6 +140,7 @@ export default function Trips() {
                 expanded={expanded === b.id}
                 onToggle={() => setExpanded(expanded === b.id ? null : b.id)}
                 onAction={handleAction}
+                onPay={handlePay}
                 acting={acting}
                 navigate={navigate}
               />
@@ -137,13 +154,13 @@ export default function Trips() {
 
 // ─── Trip Card ───────────────────────────────────────────────────────────────
 
-function TripCard({ booking, expanded, onToggle, onAction, acting, navigate }) {
+function TripCard({ booking, expanded, onToggle, onAction, onPay, acting, navigate }) {
   const meta = STATUS_META[booking.status] || { label: booking.status, color: '#6B7280', bg: 'rgba(107,114,128,0.12)', icon: Clock };
   const Icon = meta.icon;
-  const car = booking.car || {};
-  const photo = car.photos?.[0] || '';
-  const name = car.make ? `${car.make} ${car.model} ${car.year}` : 'Car';
-  const canCancel = ['pending_approval', 'ready_to_pay', 'awaiting_pickup'].includes(booking.status);
+  const photo = booking.car_photo || '';
+  const name = booking.car_name || 'Car';
+  const canCancel = ['pending', 'approved', 'confirmed'].includes(booking.status);
+  const canPay = booking.status === 'approved';
 
   return (
     <motion.div
@@ -214,6 +231,15 @@ function TripCard({ booking, expanded, onToggle, onAction, acting, navigate }) {
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+                {canPay && (
+                  <ActionBtn
+                    icon={<CheckCircle size={15} />}
+                    label={acting === booking.id + 'pay' ? 'Processing…' : 'Pay Now'}
+                    onClick={() => onPay(booking.id)}
+                    variant="primary"
+                    disabled={!!acting}
+                  />
+                )}
                 {booking.conversation_id && (
                   <ActionBtn
                     icon={<MessageSquare size={15} />}
@@ -235,7 +261,7 @@ function TripCard({ booking, expanded, onToggle, onAction, acting, navigate }) {
                   <ActionBtn
                     icon={<CheckCircle size={15} />}
                     label="Leave Review"
-                    onClick={() => navigate(`/cars/${booking.car_id}`)}
+                    onClick={() => navigate(`/review?booking=${booking.id}&reviewee=${booking.host_id}&car=${encodeURIComponent(name)}`)}
                     variant="accent"
                   />
                 )}
@@ -275,6 +301,7 @@ function DetailItem({ label, value, accent }) {
 
 function ActionBtn({ icon, label, onClick, variant, disabled }) {
   const styles = {
+    primary:{ bg: '#22C55E',                color: '#0A0A0A', border: 'none' },
     ghost:  { bg: 'rgba(255,255,255,0.06)', color: 'white',   border: '1px solid rgba(255,255,255,0.1)' },
     danger: { bg: 'rgba(239,68,68,0.1)',    color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)'  },
     accent: { bg: 'rgba(34,197,94,0.1)',    color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)'  },

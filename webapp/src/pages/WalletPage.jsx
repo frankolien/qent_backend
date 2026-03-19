@@ -46,6 +46,7 @@ export default function WalletPage() {
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [earnings, setEarnings] = useState([]);
+  const [earningsStats, setEarningsStats] = useState(null);
   const [tab, setTab] = useState('Transactions');
   const [loading, setLoading] = useState(true);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -62,8 +63,15 @@ export default function WalletPage() {
           getEarnings(),
         ]);
         if (walletRes.status === 'fulfilled') setWallet(walletRes.value.data);
-        if (txRes.status === 'fulfilled') setTransactions(txRes.value.data?.transactions || txRes.value.data || []);
-        if (earnRes.status === 'fulfilled') setEarnings(earnRes.value.data?.earnings || earnRes.value.data || []);
+        if (txRes.status === 'fulfilled') {
+          const txData = txRes.value.data;
+          setTransactions(Array.isArray(txData) ? txData : txData?.transactions || []);
+        }
+        if (earnRes.status === 'fulfilled') {
+          const earnData = earnRes.value.data;
+          setEarningsStats(earnData);
+          setEarnings(earnData?.recent_earnings || []);
+        }
       } catch {
         setError('Failed to load wallet data');
       }
@@ -91,12 +99,12 @@ export default function WalletPage() {
     setWithdrawing(false);
   };
 
-  const pendingBalance = wallet?.pending_balance || 0;
-  const totalEarned = earnings.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const pendingBalance = earningsStats?.pending_earnings || 0;
+  const totalEarned = earningsStats?.total_earned || 0;
   const totalPlatformFee = transactions
     .filter(t => (t.transaction_type || t.type || '').toLowerCase() === 'platform_fee')
     .reduce((sum, t) => sum + (t.amount || 0), 0);
-  const tripCount = earnings.length;
+  const tripCount = earningsStats?.completed_trips || 0;
 
   return (
     <motion.div
@@ -349,23 +357,23 @@ function EarningRow({ earning, index }) {
           {earning.description || earning.car_name || 'Trip earnings'}
         </div>
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', display: 'flex', gap: 8 }}>
-          <span>{fmtDate(earning.created_at || earning.date)}</span>
+          <span>{fmtDate(earning.completed_at || earning.created_at || earning.date)}</span>
           {earning.booking_id && (
             <span style={{ color: 'rgba(255,255,255,0.25)' }}>
               #{String(earning.booking_id).slice(0, 8).toUpperCase()}
+            </span>
+          )}
+          {earning.renter_name && (
+            <span style={{ color: 'rgba(255,255,255,0.3)' }}>
+              {earning.renter_name}
             </span>
           )}
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: '#22C55E' }}>
-          +{fmtMoney(earning.amount || earning.host_earnings)}
+          +{fmtMoney(earning.earned || earning.amount)}
         </div>
-        {(earning.platform_fee || earning.fee) > 0 && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
-            fee: {fmtMoney(earning.platform_fee || earning.fee)}
-          </div>
-        )}
       </div>
     </motion.div>
   );

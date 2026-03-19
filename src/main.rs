@@ -151,6 +151,9 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("http://qent.online")
             .allowed_origin("http://www.qent.online")
             .allowed_origin("http://localhost:5173") // Vite dev server
+            .allowed_origin("http://localhost:5174")
+            .allowed_origin("http://localhost:5175")
+            .allowed_origin("http://localhost:5176")
             .allow_any_method()
             .allow_any_header()
             .max_age(3600);
