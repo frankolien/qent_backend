@@ -521,23 +521,79 @@ pub async fn get_earnings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
     }
 }
 
-/// GET /api/payments/banks — List Nigerian banks (via Paystack)
+/// GET /api/payments/banks — List Nigerian banks (via Paystack + logos)
 pub async fn list_banks(config: web::Data<AppConfig>) -> HttpResponse {
     let client = reqwest::Client::new();
-    let resp = client
+
+    // Fetch banks from Paystack
+    let paystack_resp = client
         .get("https://api.paystack.co/bank?country=nigeria")
         .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
         .send()
         .await;
 
-    match resp {
+    let banks = match paystack_resp {
         Ok(r) => {
             let json: serde_json::Value = r.json().await.unwrap_or_default();
-            HttpResponse::Ok().json(json["data"].clone())
+            json["data"].as_array().cloned().unwrap_or_default()
         }
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": format!("Failed to fetch banks: {}", e)})),
-    }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": format!("Failed to fetch banks: {}", e)}));
+        }
+    };
+
+    // Fetch logos from nigerianbanks.xyz (best-effort)
+    let logos_resp = client
+        .get("https://nigerianbanks.xyz")
+        .send()
+        .await;
+
+    let logo_map: std::collections::HashMap<String, String> = match logos_resp {
+        Ok(r) => {
+            let json: serde_json::Value = r.json().await.unwrap_or_default();
+            json.as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|b| {
+                            let name = b["name"].as_str()?.to_lowercase();
+                            let logo = b["logo"].as_str()?.to_string();
+                            Some((name, logo))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        Err(_) => std::collections::HashMap::new(),
+    };
+
+    // Merge logos into bank data
+    let enriched: Vec<serde_json::Value> = banks
+        .into_iter()
+        .map(|mut bank| {
+            let name = bank["name"].as_str().unwrap_or("").to_lowercase();
+            // Try to find a matching logo by fuzzy name match
+            let logo = logo_map.iter().find_map(|(logo_name, url)| {
+                if name.contains(logo_name) || logo_name.contains(&name) {
+                    Some(url.clone())
+                } else {
+                    // Try matching first word
+                    let first_word = name.split_whitespace().next().unwrap_or("");
+                    if first_word.len() > 3 && logo_name.contains(first_word) {
+                        Some(url.clone())
+                    } else {
+                        None
+                    }
+                }
+            });
+            if let Some(logo_url) = logo {
+                bank["logo"] = serde_json::Value::String(logo_url);
+            }
+            bank
+        })
+        .collect();
+
+    HttpResponse::Ok().json(enriched)
 }
 
 /// POST /api/payments/verify-account — Verify bank account details

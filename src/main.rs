@@ -150,6 +150,7 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("https://thriving-bonbon-08b8ce.netlify.app")
             .allowed_origin("http://qent.online")
             .allowed_origin("http://www.qent.online")
+            .allowed_origin("http://localhost:5173") // Vite dev server
             .allow_any_method()
             .allow_any_header()
             .max_age(3600);
@@ -216,18 +217,16 @@ async fn main() -> std::io::Result<()> {
                             .route("/bookings/{id}", web::get().to(handlers::bookings::get_booking))
                             .route("/bookings/{id}/action", web::post().to(handlers::bookings::update_booking_status))
                             .route("/bookings/host/pending", web::get().to(handlers::bookings::get_host_pending_bookings))
-                            // Payments (rate-limited sensitive ops)
+                            // Payments (write ops are rate-limited, reads are not)
                             .service(
                                 web::scope("/payments")
-                                    .wrap(Governor::new(&payment_rate_limit))
+                                    .route("/wallet", web::get().to(handlers::payments::get_wallet_balance))
+                                    .route("/wallet/transactions", web::get().to(handlers::payments::get_wallet_transactions))
+                                    .route("/earnings", web::get().to(handlers::payments::get_earnings))
                                     .route("/initiate", web::post().to(handlers::payments::initiate_payment))
                                     .route("/withdraw", web::post().to(handlers::payments::withdraw))
                                     .route("/refund/{id}", web::post().to(handlers::payments::request_refund))
                             )
-                            // Payments (read-only, no rate limit)
-                            .route("/payments/wallet", web::get().to(handlers::payments::get_wallet_balance))
-                            .route("/payments/wallet/transactions", web::get().to(handlers::payments::get_wallet_transactions))
-                            .route("/payments/earnings", web::get().to(handlers::payments::get_earnings))
                             // Saved Cards
                             .route("/cards", web::get().to(handlers::cards::list_cards))
                             .route("/cards/{id}/default", web::post().to(handlers::cards::set_default_card))

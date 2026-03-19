@@ -3,13 +3,19 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use validator::Validate;
 
+use chrono::Utc;
+use jsonwebtoken::{encode, EncodingKey, Header};
+
 use crate::models::{
     Car, CarStatus, Claims, PartnerApplication, CreatePartnerApplicationRequest, HostDashboard,
+    UserRole,
 };
+use crate::services::AppConfig;
 
 pub async fn apply(
     req: HttpRequest,
     pool: web::Data<PgPool>,
+    config: web::Data<AppConfig>,
     body: web::Json<CreatePartnerApplicationRequest>,
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
@@ -112,9 +118,23 @@ pub async fn apply(
         .execute(pool.get_ref())
         .await;
 
+    // Issue a new JWT with the Host role so the app picks it up immediately
+    let new_claims = Claims {
+        sub: claims.sub,
+        role: UserRole::Host,
+        exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
+    };
+    let new_token = encode(
+        &Header::default(),
+        &new_claims,
+        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
+    )
+    .unwrap_or_default();
+
     HttpResponse::Created().json(serde_json::json!({
         "message": "Partnership application submitted successfully",
-        "application": application
+        "application": application,
+        "token": new_token
     }))
 }
 
