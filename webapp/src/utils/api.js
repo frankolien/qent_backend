@@ -33,7 +33,7 @@ export default api;
 // Auth
 export const signIn = (email, password) => api.post('/auth/signin', { email, password });
 export const signUp = (data) => api.post('/auth/signup', data);
-export const getProfile = () => api.get('/auth/profile');
+export const getProfile = () => api.get('/profile');
 
 // Cars
 export const searchCars = (params) => api.get('/cars/search', { params });

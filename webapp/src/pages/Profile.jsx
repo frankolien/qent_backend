@@ -41,7 +41,7 @@ export default function Profile() {
     setSaving(true);
     setError('');
     try {
-      const res = await api.patch('/auth/profile', form);
+      const res = await api.put('/profile', form);
       setUser(res.data);
       setEditing(false);
       setSuccess('Profile updated!');

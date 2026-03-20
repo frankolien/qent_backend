@@ -209,9 +209,9 @@ async fn main() -> std::io::Result<()> {
                         web::scope("")
                             .wrap(actix_web::middleware::from_fn(auth_mw))
                             // Profile
-                            .route("/auth/profile", web::get().to(handlers::auth::get_profile))
-                            .route("/auth/profile", web::put().to(handlers::auth::update_profile))
-                            .route("/auth/verify-identity", web::post().to(handlers::auth::verify_identity))
+                            .route("/profile", web::get().to(handlers::auth::get_profile))
+                            .route("/profile", web::put().to(handlers::auth::update_profile))
+                            .route("/profile/verify-identity", web::post().to(handlers::auth::verify_identity))
                             // Cars - host
                             .route("/cars", web::post().to(handlers::cars::create_car))
                             .route("/cars/my-listings", web::get().to(handlers::cars::get_host_cars))
