@@ -236,6 +236,7 @@ async fn main() -> std::io::Result<()> {
                                     .route("/initiate", web::post().to(handlers::payments::initiate_payment))
                                     .route("/withdraw", web::post().to(handlers::payments::withdraw))
                                     .route("/refund/{id}", web::post().to(handlers::payments::request_refund))
+                                    .route("/verify", web::post().to(handlers::payments::verify_payment))
                             )
                             // Saved Cards
                             .route("/cards", web::get().to(handlers::cards::list_cards))
