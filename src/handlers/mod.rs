@@ -17,3 +17,5 @@ pub mod damage_reports;
 pub mod compliance;
 pub mod waitlist;
 pub mod health;
+pub mod ws;
+pub mod upload;

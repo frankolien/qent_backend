@@ -1,3 +1,4 @@
+use actix::Actor;
 use actix_cors::Cors;
 use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_web::{dev::ServiceRequest, middleware::Logger, web, App, Error, HttpServer};
@@ -138,6 +139,9 @@ async fn main() -> std::io::Result<()> {
         .finish()
         .unwrap();
 
+    // Start WebSocket connection manager
+    let ws_manager = handlers::ws::WsManager::new().start();
+
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000")
@@ -163,7 +167,10 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(config.clone()))
+            .app_data(web::Data::new(ws_manager.clone()))
             .route("/health", web::get().to(handlers::health::health_check))
+            .route("/ws", web::get().to(handlers::ws::ws_connect))
+            .service(actix_files::Files::new("/uploads", "uploads").show_files_listing())
             .service(
                 web::scope("/api")
                     // Auth - public (rate limited)
@@ -261,6 +268,8 @@ async fn main() -> std::io::Result<()> {
                             .route("/chat/conversations/{id}/messages", web::post().to(handlers::chat::send_message))
                             .route("/chat/conversations/{id}/read", web::post().to(handlers::chat::mark_read))
                             .route("/chat/conversations/{id}", web::delete().to(handlers::chat::delete_conversation))
+                            // File upload
+                            .route("/upload", web::post().to(handlers::upload::upload_file))
                             // Compliance & Account
                             .route("/auth/accept-terms", web::post().to(handlers::compliance::accept_terms))
                             .route("/auth/terms-status", web::get().to(handlers::compliance::terms_status))

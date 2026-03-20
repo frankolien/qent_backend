@@ -21,7 +21,22 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    getHomepage().then(r => setSections(r.data)).catch(console.error).finally(() => setLoading(false));
+    // Try to get user location for nearby results
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          getHomepage({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })
+            .then(r => setSections(r.data)).catch(console.error).finally(() => setLoading(false));
+        },
+        () => {
+          // Location denied — fetch without coords
+          getHomepage().then(r => setSections(r.data)).catch(console.error).finally(() => setLoading(false));
+        },
+        { timeout: 5000 }
+      );
+    } else {
+      getHomepage().then(r => setSections(r.data)).catch(console.error).finally(() => setLoading(false));
+    }
   }, []);
 
   useEffect(() => {
@@ -136,6 +151,7 @@ export default function Home() {
           ) : sections && (
             <>
               {sections.recommended?.length > 0 && <CarSection title="Recommended for You" subtitle="Based on your preferences" cars={sections.recommended} />}
+              {sections.nearby?.length > 0 && <CarSection title="Nearby Cars" subtitle="Cars close to you" cars={sections.nearby} />}
               {sections.best_cars?.length > 0 && <CarSection title="Best Cars" subtitle="Top rated on Qent" cars={sections.best_cars} />}
               {sections.popular?.length > 0 && <CarSection title="Popular Cars" subtitle="Most booked this month" cars={sections.popular} />}
             </>
