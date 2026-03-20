@@ -101,7 +101,7 @@ export default function Login() {
       <div style={{
         width: 520, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '40px 48px',
+        padding: '80px 48px',
         background: '#0A0A0A',
         borderLeft: '1px solid rgba(255,255,255,0.06)',
       }}>
