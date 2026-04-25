@@ -4,7 +4,7 @@
 
 Written for a developer who knows JavaScript/Dart but is learning Rust by understanding every line of the Qent car rental platform backend.
 
----
+-----------
 
 ## Table of Contents
 
