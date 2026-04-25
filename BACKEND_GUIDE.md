@@ -361,7 +361,7 @@ Here, `handlers::auth::sign_up` is a function pointer (not a closure), but Actix
 
 Rust enums can hold data. They are closer to Dart's sealed classes or TypeScript's discriminated unions than to JavaScript's object-based enums.
 
-```rust
+```RUST
 // From src/models/booking.rs:
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "booking_status", rename_all = "lowercase")]
