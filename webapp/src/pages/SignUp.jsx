@@ -177,50 +177,42 @@ export default function SignUp() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          style={{
-            position: "relative",
-            zIndex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
+          style={{ position: "relative", zIndex: 1 }}
         >
-          <div>
-            <Link
-              to="/"
-              style={{
-                textDecoration: "none",
-                display: "inline-block",
-                marginBottom: 48,
-              }}
-            >
-              <Logo variant="full" size={32} />
-            </Link>
-            <h2
-              style={{
-                fontSize: 52,
-                fontWeight: 900,
-                letterSpacing: -2,
-                lineHeight: 1.05,
-                marginBottom: 16,
-                maxWidth: 440,
-              }}
-            >
-              Start your
-              <br />
-              journey.
-            </h2>
-            <p
-              style={{
-                color: "rgba(255,255,255,0.4)",
-                fontSize: 16,
-                lineHeight: 1.6,
-                maxWidth: 380,
-              }}
-            >
-              Join thousands of Nigerians who rent smarter with Qent.
-            </p>
-          </div>
+          <Link
+            to="/"
+            style={{
+              textDecoration: "none",
+              display: "inline-block",
+              marginBottom: 48,
+            }}
+          >
+            <Logo variant="full" size={32} />
+          </Link>
+          <h2
+            style={{
+              fontSize: 52,
+              fontWeight: 900,
+              letterSpacing: -2,
+              lineHeight: 1.05,
+              marginBottom: 16,
+              maxWidth: 440,
+            }}
+          >
+            Start your
+            <br />
+            journey.
+          </h2>
+          <p
+            style={{
+              color: "rgba(255,255,255,0.4)",
+              fontSize: 16,
+              lineHeight: 1.6,
+              maxWidth: 380,
+            }}
+          >
+            Join thousands of Nigerians who rent smarter with Qent.
+          </p>
 
           <div
             style={{
