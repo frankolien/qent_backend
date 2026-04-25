@@ -52,50 +52,48 @@ export default function Messages() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      style={{ maxWidth: 680, margin: '0 auto', padding: '100px 24px 80px' }}
+      className="max-w-[680px] mx-auto pt-[100px] px-6 pb-20"
     >
-      {/* Header */}
-      <button onClick={() => navigate(-1)} style={backBtn}>
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center justify-center w-10 h-10 rounded-xl mb-5 bg-white/[0.06] border border-white/[0.08] text-white cursor-pointer"
+      >
         <ArrowLeft size={18} />
       </button>
 
-      <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: -1, marginBottom: 6 }}>Messages</h1>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 28 }}>
+      <h1 className="text-[32px] font-black tracking-tighter mb-1.5">Messages</h1>
+      <p className="text-white/40 text-sm mb-7">
         {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
       </p>
 
       {/* Search */}
       {conversations.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 16px', borderRadius: 14,
-          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-          marginBottom: 24,
-        }}>
+        <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] mb-6">
           <Search size={16} color="rgba(255,255,255,0.3)" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search conversations…"
-            style={{
-              flex: 1, border: 'none', background: 'none', fontSize: 14,
-              color: 'white', outline: 'none', fontFamily: 'inherit',
-            }}
+            className="flex-1 border-0 bg-transparent text-sm text-white outline-none"
           />
         </div>
       )}
 
-      {error && <div style={errorBox}>{error}</div>}
+      {error && (
+        <div className="bg-red-500/10 text-red-500 px-4 py-3 rounded-2xl text-[13px] font-medium mb-5 border border-red-500/20">
+          {error}
+        </div>
+      )}
 
       {loading ? (
-        <div style={centerStyle}>
-          <div style={spinnerStyle} />
-          <p style={{ color: 'rgba(255,255,255,0.4)', marginTop: 16 }}>Loading conversations…</p>
+        <div className="flex flex-col items-center justify-center px-6 py-20">
+          <div className="spinner" />
+          <p className="text-white/40 mt-4">Loading conversations…</p>
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState hasConvos={conversations.length > 0} navigate={navigate} />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div className="flex flex-col gap-0.5">
           {filtered.map((conv, i) => (
             <ConvRow
               key={conv.id}
@@ -110,8 +108,6 @@ export default function Messages() {
     </motion.div>
   );
 }
-
-// ─── Conversation Row ─────────────────────────────────────────────────────────
 
 function ConvRow({ conv, user, index, onClick }) {
   const [hovered, setHovered] = useState(false);
@@ -130,60 +126,45 @@ function ConvRow({ conv, user, index, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-        borderRadius: 16, cursor: 'pointer', transition: 'background 0.2s',
-        background: hovered ? 'rgba(255,255,255,0.06)' : 'transparent',
-      }}
+      className={`flex items-center gap-3.5 px-4 py-3.5 rounded-2xl cursor-pointer transition-colors duration-200 ${
+        hovered ? 'bg-white/[0.06]' : 'bg-transparent'
+      }`}
     >
       {/* Avatar */}
-      <div style={{ position: 'relative', flexShrink: 0 }}>
-        <div style={{
-          width: 50, height: 50, borderRadius: 16,
-          background: 'linear-gradient(135deg, rgba(34,197,94,0.3), rgba(34,197,94,0.1))',
-          border: '1px solid rgba(34,197,94,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16, fontWeight: 700, color: 'var(--accent)',
-        }}>
+      <div className="relative flex-shrink-0">
+        <div
+          className="w-[50px] h-[50px] rounded-2xl border border-accent/20 flex items-center justify-center text-base font-bold text-accent"
+          style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.3), rgba(34,197,94,0.1))' }}
+        >
           {initials || '?'}
         </div>
         {unread > 0 && (
-          <div style={{
-            position: 'absolute', top: -4, right: -4,
-            minWidth: 18, height: 18, borderRadius: 9,
-            background: '#22C55E', color: '#0A0A0A',
-            fontSize: 10, fontWeight: 800,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '0 4px', border: '2px solid #0A0A0A',
-          }}>
+          <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-accent text-black text-[10px] font-extrabold flex items-center justify-center px-1 border-2 border-black">
             {unread > 99 ? '99+' : unread}
           </div>
         )}
       </div>
 
       {/* Text */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-          <span style={{ fontSize: 15, fontWeight: unread > 0 ? 800 : 600, color: 'white' }}>{otherName}</span>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', flexShrink: 0, marginLeft: 8 }}>{time}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-baseline mb-1">
+          <span className={`text-[15px] text-white ${unread > 0 ? 'font-extrabold' : 'font-semibold'}`}>{otherName}</span>
+          <span className="text-[11px] text-white/35 flex-shrink-0 ml-2">{time}</span>
         </div>
-        <p style={{
-          margin: 0, fontSize: 13,
-          color: unread > 0 ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.4)',
-          fontWeight: unread > 0 ? 500 : 400,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {isLastFromMe && <span style={{ color: 'rgba(34,197,94,0.7)' }}>You: </span>}
+        <p
+          className={`m-0 text-[13px] overflow-hidden text-ellipsis whitespace-nowrap ${
+            unread > 0 ? 'text-white/70 font-medium' : 'text-white/40 font-normal'
+          }`}
+        >
+          {isLastFromMe && <span className="text-accent/70">You: </span>}
           {lastMsg}
         </p>
       </div>
 
-      <ChevronRight size={16} color="rgba(255,255,255,0.2)" style={{ flexShrink: 0 }} />
+      <ChevronRight size={16} color="rgba(255,255,255,0.2)" className="flex-shrink-0" />
     </motion.div>
   );
 }
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getOtherName(conv, user) {
   if (!user) return conv.other_user_name || 'User';
@@ -198,20 +179,15 @@ function EmptyState({ hasConvos, navigate }) {
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4 }}
-      style={{ textAlign: 'center', padding: '80px 24px' }}
+      className="text-center px-6 py-20"
     >
-      <div style={{
-        width: 80, height: 80, borderRadius: 24,
-        background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 24px',
-      }}>
+      <div className="w-20 h-20 rounded-3xl bg-accent/[0.08] border border-accent/15 flex items-center justify-center mx-auto mb-6">
         <MessageSquare size={36} color="rgba(34,197,94,0.5)" />
       </div>
-      <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 10 }}>
+      <h3 className="text-[22px] font-extrabold mb-2.5">
         {hasConvos ? 'No results found' : 'No conversations yet'}
       </h3>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, lineHeight: 1.6, maxWidth: 320, margin: '0 auto 32px' }}>
+      <p className="text-white/40 text-sm leading-relaxed max-w-[320px] mx-auto mb-8">
         {hasConvos
           ? 'No conversations match your search.'
           : 'When you book a car or receive a booking, your messages will appear here.'}
@@ -219,11 +195,7 @@ function EmptyState({ hasConvos, navigate }) {
       {!hasConvos && (
         <button
           onClick={() => navigate('/search')}
-          style={{
-            padding: '14px 32px', background: 'var(--accent)', color: '#0A0A0A',
-            border: 'none', borderRadius: 100, fontSize: 15, fontWeight: 700,
-            cursor: 'pointer', fontFamily: 'inherit',
-          }}
+          className="px-8 py-3.5 bg-accent text-black border-0 rounded-full text-[15px] font-bold cursor-pointer"
         >
           Browse cars
         </button>
@@ -231,30 +203,3 @@ function EmptyState({ hasConvos, navigate }) {
     </motion.div>
   );
 }
-
-// ─── Shared styles ───────────────────────────────────────────────────────────
-
-const backBtn = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 40, height: 40, borderRadius: 12, marginBottom: 20,
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-  color: 'white', cursor: 'pointer',
-};
-
-const errorBox = {
-  background: 'rgba(239,68,68,0.1)', color: '#EF4444',
-  padding: '12px 16px', borderRadius: 14, fontSize: 13,
-  fontWeight: 500, marginBottom: 20, border: '1px solid rgba(239,68,68,0.2)',
-};
-
-const centerStyle = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center',
-  justifyContent: 'center', padding: '80px 24px',
-};
-
-const spinnerStyle = {
-  width: 36, height: 36, borderRadius: '50%',
-  border: '3px solid rgba(255,255,255,0.08)',
-  borderTopColor: '#22C55E',
-  animation: 'spin 0.8s linear infinite',
-};

@@ -23,9 +23,14 @@ export default function LeaveReview() {
   if (!user) { navigate('/login'); return null; }
   if (!bookingId || !revieweeId) {
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '120px 24px', textAlign: 'center' }}>
-        <p style={{ color: 'rgba(255,255,255,0.4)' }}>Missing booking info.</p>
-        <button onClick={() => navigate('/trips')} style={linkStyle}>Back to Trips</button>
+      <div className="max-w-[500px] mx-auto pt-[120px] px-6 pb-[120px] text-center">
+        <p className="text-white/40">Missing booking info.</p>
+        <button
+          onClick={() => navigate('/trips')}
+          className="bg-transparent border-0 text-accent text-sm font-semibold cursor-pointer mt-4 inline-block"
+        >
+          Back to Trips
+        </button>
       </div>
     );
   }
@@ -53,19 +58,21 @@ export default function LeaveReview() {
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        style={{ maxWidth: 500, margin: '0 auto', padding: '120px 24px', textAlign: 'center' }}
+        className="max-w-[500px] mx-auto pt-[120px] px-6 pb-[120px] text-center"
       >
-        <div style={{
-          width: 72, height: 72, borderRadius: 24, margin: '0 auto 20px',
-          background: 'rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
+        <div className="w-[72px] h-[72px] rounded-3xl mx-auto mb-5 bg-accent/10 flex items-center justify-center">
           <Star size={32} color="#22C55E" fill="#22C55E" />
         </div>
-        <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>Thanks for your review!</h2>
-        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 32 }}>
+        <h2 className="text-2xl font-extrabold mb-2">Thanks for your review!</h2>
+        <p className="text-white/40 text-sm mb-8">
           Your feedback helps the Qent community.
         </p>
-        <button onClick={() => navigate('/trips')} style={primaryBtn}>Back to Trips</button>
+        <button
+          onClick={() => navigate('/trips')}
+          className="w-full p-4 bg-accent text-black border-0 rounded-2xl text-[15px] font-bold cursor-pointer transition-opacity"
+        >
+          Back to Trips
+        </button>
       </motion.div>
     );
   }
@@ -75,67 +82,68 @@ export default function LeaveReview() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      style={{ maxWidth: 500, margin: '0 auto', padding: '100px 24px 80px' }}
+      className="max-w-[500px] mx-auto pt-[100px] px-6 pb-20"
     >
-      <button onClick={() => navigate(-1)} style={backBtn}>
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center justify-center w-10 h-10 rounded-xl mb-5 bg-white/[0.06] border border-white/[0.08] text-white cursor-pointer"
+      >
         <ArrowLeft size={18} />
       </button>
 
-      <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: -0.5, marginBottom: 6 }}>Leave a Review</h1>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 36 }}>
+      <h1 className="text-[28px] font-extrabold tracking-tight mb-1.5">Leave a Review</h1>
+      <p className="text-white/40 text-sm mb-9">
         How was your experience with {carName}?
       </p>
 
-      {error && <div style={errorBox}>{error}</div>}
+      {error && (
+        <div className="bg-red-500/10 text-red-500 px-4 py-3 rounded-2xl text-[13px] font-medium mb-5 border border-red-500/20">
+          {error}
+        </div>
+      )}
 
       {/* Star rating */}
-      <div style={{ marginBottom: 32 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Rating</p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {[1, 2, 3, 4, 5].map(n => (
-            <button
-              key={n}
-              onClick={() => setRating(n)}
-              onMouseEnter={() => setHovered(n)}
-              onMouseLeave={() => setHovered(0)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-                transition: 'transform 0.15s',
-                transform: (hovered >= n || rating >= n) ? 'scale(1.15)' : 'scale(1)',
-              }}
-            >
-              <Star
-                size={36}
-                color={(hovered >= n || rating >= n) ? '#F59E0B' : 'rgba(255,255,255,0.15)'}
-                fill={(hovered >= n || rating >= n) ? '#F59E0B' : 'transparent'}
-                style={{ transition: 'all 0.15s' }}
-              />
-            </button>
-          ))}
+      <div className="mb-8">
+        <p className="text-[13px] font-semibold text-white/50 mb-3 uppercase tracking-wider">Rating</p>
+        <div className="flex gap-2">
+          {[1, 2, 3, 4, 5].map(n => {
+            const filled = hovered >= n || rating >= n;
+            return (
+              <button
+                key={n}
+                onClick={() => setRating(n)}
+                onMouseEnter={() => setHovered(n)}
+                onMouseLeave={() => setHovered(0)}
+                className={`bg-transparent border-0 cursor-pointer p-1 transition-transform duration-150 ${
+                  filled ? 'scale-110' : 'scale-100'
+                }`}
+              >
+                <Star
+                  size={36}
+                  color={filled ? '#F59E0B' : 'rgba(255,255,255,0.15)'}
+                  fill={filled ? '#F59E0B' : 'transparent'}
+                  style={{ transition: 'all 0.15s' }}
+                />
+              </button>
+            );
+          })}
         </div>
         {rating > 0 && (
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
+          <p className="text-[13px] text-white/40 mt-2">
             {['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'][rating]}
           </p>
         )}
       </div>
 
       {/* Comment */}
-      <div style={{ marginBottom: 32 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Comment (optional)</p>
+      <div className="mb-8">
+        <p className="text-[13px] font-semibold text-white/50 mb-3 uppercase tracking-wider">Comment (optional)</p>
         <textarea
           value={comment}
           onChange={e => setComment(e.target.value)}
           placeholder="Tell us about your experience..."
           rows={4}
-          style={{
-            width: '100%', padding: '14px 16px', borderRadius: 14, fontSize: 14,
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-            color: 'white', fontFamily: 'inherit', resize: 'vertical', outline: 'none',
-            boxSizing: 'border-box', transition: 'border-color 0.2s',
-          }}
-          onFocus={e => e.target.style.borderColor = 'rgba(34,197,94,0.4)'}
-          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
+          className="w-full px-4 py-3.5 rounded-2xl text-sm bg-white/[0.04] border border-white/[0.08] text-white resize-y outline-none box-border transition-colors focus:border-accent/40"
         />
       </div>
 
@@ -143,39 +151,12 @@ export default function LeaveReview() {
       <button
         onClick={handleSubmit}
         disabled={submitting || rating === 0}
-        style={{
-          ...primaryBtn,
-          opacity: (submitting || rating === 0) ? 0.5 : 1,
-          cursor: (submitting || rating === 0) ? 'not-allowed' : 'pointer',
-        }}
+        className={`w-full p-4 bg-accent text-black border-0 rounded-2xl text-[15px] font-bold transition-opacity ${
+          (submitting || rating === 0) ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer'
+        }`}
       >
         {submitting ? 'Submitting...' : 'Submit Review'}
       </button>
     </motion.div>
   );
 }
-
-const backBtn = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 40, height: 40, borderRadius: 12, marginBottom: 20,
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-  color: 'white', cursor: 'pointer',
-};
-
-const primaryBtn = {
-  width: '100%', padding: 16, background: '#22C55E', color: '#0A0A0A',
-  border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 700,
-  cursor: 'pointer', fontFamily: 'inherit', transition: 'opacity 0.2s',
-};
-
-const linkStyle = {
-  background: 'none', border: 'none', color: '#22C55E',
-  fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-  marginTop: 16, display: 'inline-block',
-};
-
-const errorBox = {
-  background: 'rgba(239,68,68,0.1)', color: '#EF4444',
-  padding: '12px 16px', borderRadius: 14, fontSize: 13,
-  fontWeight: 500, marginBottom: 20, border: '1px solid rgba(239,68,68,0.2)',
-};

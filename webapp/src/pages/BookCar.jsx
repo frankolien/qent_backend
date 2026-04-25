@@ -21,13 +21,16 @@ export default function BookCar() {
     getCar(id).then(r => setCar(r.data)).catch(() => navigate('/')).finally(() => setLoading(false));
   }, [id, user]);
 
-  if (loading || !car) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gray-500)' }}>Loading...</div>;
+  if (loading || !car) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>
+    );
+  }
 
   const photo = car.photos?.[0] || '';
   const name = `${car.make} ${car.model} ${car.year}`;
   const pricePerDay = car.price_per_day;
 
-  // Calculate totals
   let totalDays = 0;
   let subtotal = 0;
   let serviceFee = 0;
@@ -64,97 +67,101 @@ export default function BookCar() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      style={{ maxWidth: 900, margin: '0 auto', padding: '100px 32px 80px' }}
+      className="max-w-[900px] mx-auto pt-[100px] px-8 pb-20"
     >
-      <button onClick={() => navigate(-1)} style={{
-        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 14, width: 44, height: 44, cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', marginBottom: 28,
-      }}>
+      <button
+        onClick={() => navigate(-1)}
+        className="bg-white/[0.06] border border-white/[0.08] rounded-2xl w-11 h-11 cursor-pointer flex items-center justify-center text-white mb-7"
+      >
         <ChevronLeft size={20} />
       </button>
 
-      <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 32 }}>Complete your booking</h1>
+      <h1 className="text-[28px] font-extrabold mb-8">Complete your booking</h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Left — Form */}
         <div>
           <form onSubmit={handleSubmit}>
             {error && (
-              <div style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444', padding: '12px 16px', borderRadius: 14, fontSize: 13, fontWeight: 500, marginBottom: 20, border: '1px solid rgba(239,68,68,0.2)' }}>{error}</div>
-            )}
-
-            <label style={labelStyle}>Pickup Date</label>
-            <div style={inputWrapStyle}>
-              <Calendar size={16} color="var(--gray-500)" />
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                style={dateInputStyle} />
-            </div>
-
-            <label style={labelStyle}>Return Date</label>
-            <div style={inputWrapStyle}>
-              <Calendar size={16} color="var(--gray-500)" />
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                min={startDate || new Date().toISOString().split('T')[0]}
-                style={dateInputStyle} />
-            </div>
-
-            <label style={labelStyle}>Pickup Location</label>
-            <div style={inputWrapStyle}>
-              <MapPin size={16} color="var(--gray-500)" />
-              <span style={{ color: 'white', fontSize: 14 }}>{car.location}</span>
-            </div>
-
-            {/* Price breakdown */}
-            {totalDays > 0 && (
-              <div style={{
-                marginTop: 28, padding: 24, borderRadius: 20,
-                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-              }}>
-                <Row label={`\u20A6${fmt(pricePerDay)} x ${totalDays} day${totalDays > 1 ? 's' : ''}`} value={`\u20A6${fmt(subtotal)}`} />
-                <Row label="Service fee (10%)" value={`\u20A6${fmt(serviceFee)}`} />
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '14px 0' }} />
-                <Row label="Total" value={`\u20A6${fmt(total)}`} bold />
+              <div className="bg-red-500/10 text-red-500 px-4 py-3 rounded-2xl text-[13px] font-medium mb-5 border border-red-500/20">
+                {error}
               </div>
             )}
 
-            <button type="submit" disabled={submitting || !totalDays} style={{
-              width: '100%', padding: 16, marginTop: 24,
-              background: totalDays ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
-              color: totalDays ? 'var(--black)' : 'var(--gray-500)',
-              border: 'none', borderRadius: 16, fontSize: 16, fontWeight: 700,
-              cursor: totalDays ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
-              opacity: submitting ? 0.6 : 1,
-            }}>
-              {submitting ? 'Booking...' : totalDays ? `Book for \u20A6${fmt(total)}` : 'Select dates to continue'}
+            <Label>Pickup Date</Label>
+            <InputWrap>
+              <Calendar size={16} color="var(--gray-500)" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="flex-1 border-0 bg-transparent text-white text-sm outline-none"
+                style={{ colorScheme: 'dark' }}
+              />
+            </InputWrap>
+
+            <Label>Return Date</Label>
+            <InputWrap>
+              <Calendar size={16} color="var(--gray-500)" />
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                min={startDate || new Date().toISOString().split('T')[0]}
+                className="flex-1 border-0 bg-transparent text-white text-sm outline-none"
+                style={{ colorScheme: 'dark' }}
+              />
+            </InputWrap>
+
+            <Label>Pickup Location</Label>
+            <InputWrap>
+              <MapPin size={16} color="var(--gray-500)" />
+              <span className="text-white text-sm">{car.location}</span>
+            </InputWrap>
+
+            {totalDays > 0 && (
+              <div className="mt-7 p-6 rounded-[20px] bg-white/[0.03] border border-white/[0.06]">
+                <Row label={`₦${fmt(pricePerDay)} x ${totalDays} day${totalDays > 1 ? 's' : ''}`} value={`₦${fmt(subtotal)}`} />
+                <Row label="Service fee (10%)" value={`₦${fmt(serviceFee)}`} />
+                <div className="h-px bg-white/[0.08] my-3.5" />
+                <Row label="Total" value={`₦${fmt(total)}`} bold />
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting || !totalDays}
+              className={`w-full p-4 mt-6 border-0 rounded-2xl text-base font-bold transition-opacity ${
+                totalDays
+                  ? 'bg-accent text-black cursor-pointer'
+                  : 'bg-white/10 text-gray-500 cursor-not-allowed'
+              } ${submitting ? 'opacity-60' : 'opacity-100'}`}
+            >
+              {submitting ? 'Booking...' : totalDays ? `Book for ₦${fmt(total)}` : 'Select dates to continue'}
             </button>
           </form>
         </div>
 
         {/* Right — Car summary */}
         <div>
-          <div style={{
-            borderRadius: 24, overflow: 'hidden',
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-            position: 'sticky', top: 100,
-          }}>
-            {photo && <img src={photo} alt={name} style={{ width: '100%', height: 220, objectFit: 'cover' }} />}
-            <div style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{name}</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gray-500)', fontSize: 13, marginBottom: 16 }}>
+          <div className="rounded-3xl overflow-hidden bg-white/[0.04] border border-white/[0.08] sticky top-[100px]">
+            {photo && <img src={photo} alt={name} className="w-full h-[220px] object-cover" />}
+            <div className="p-6">
+              <h3 className="text-xl font-bold mb-2">{name}</h3>
+              <div className="flex items-center gap-1.5 text-gray-500 text-[13px] mb-4">
                 <MapPin size={13} /> {car.location}
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>
-                {"\u20A6"}{fmt(pricePerDay)}<span style={{ fontSize: 13, fontWeight: 500, color: 'var(--gray-500)' }}>/day</span>
+              <div className="text-2xl font-extrabold text-accent">
+                ₦{fmt(pricePerDay)}<span className="text-[13px] font-medium text-gray-500">/day</span>
               </div>
 
-              <div style={{ marginTop: 20, padding: 16, borderRadius: 14, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="mt-5 p-4 rounded-2xl bg-accent/[0.08] border border-accent/15 flex items-center gap-2.5">
                 <Shield size={16} color="var(--accent)" />
-                <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>Protection plan included</span>
+                <span className="text-[13px] text-accent font-semibold">Protection plan included</span>
               </div>
 
-              <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div className="mt-4 flex gap-2 flex-wrap">
                 <Tag>{car.seats || 5} seats</Tag>
                 <Tag>{car.color}</Tag>
                 {car.features?.slice(0, 3).map((f, i) => <Tag key={i}>{f}</Tag>)}
@@ -167,29 +174,27 @@ export default function BookCar() {
   );
 }
 
+function Label({ children }) {
+  return <label className="text-[13px] font-semibold text-gray-400 block mb-2 mt-5">{children}</label>;
+}
+
+function InputWrap({ children }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5 bg-white/[0.04] border border-white/[0.08] rounded-2xl">
+      {children}
+    </div>
+  );
+}
+
 function Row({ label, value, bold }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-      <span style={{ color: bold ? 'white' : 'var(--gray-500)', fontSize: 14, fontWeight: bold ? 700 : 400 }}>{label}</span>
-      <span style={{ color: 'white', fontSize: 14, fontWeight: bold ? 700 : 500 }}>{value}</span>
+    <div className="flex justify-between mb-2.5">
+      <span className={`text-sm ${bold ? 'text-white font-bold' : 'text-gray-500 font-normal'}`}>{label}</span>
+      <span className={`text-sm text-white ${bold ? 'font-bold' : 'font-medium'}`}>{value}</span>
     </div>
   );
 }
 
 function Tag({ children }) {
-  return <span style={{ background: 'rgba(255,255,255,0.06)', padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, color: 'var(--gray-400)' }}>{children}</span>;
+  return <span className="bg-white/[0.06] px-3 py-[5px] rounded-lg text-xs font-medium text-gray-400">{children}</span>;
 }
-
-const labelStyle = { fontSize: 13, fontWeight: 600, color: 'var(--gray-400)', display: 'block', marginBottom: 8, marginTop: 20 };
-
-const inputWrapStyle = {
-  display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
-  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: 14,
-};
-
-const dateInputStyle = {
-  flex: 1, border: 'none', background: 'none', color: 'white',
-  fontSize: 14, outline: 'none', fontFamily: 'inherit',
-  colorScheme: 'dark',
-};
