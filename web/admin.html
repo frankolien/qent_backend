@@ -218,6 +218,10 @@ async function handleLogin() {
   const errEl = document.getElementById('loginError');
   errEl.style.display = 'none';
 
+  const btn = document.querySelector('#loginOverlay button');
+  btn.textContent = 'Signing in...';
+  btn.disabled = true;
+
   try {
     const resp = await fetch(`${API}/auth/signin`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -225,16 +229,27 @@ async function handleLogin() {
     });
     const data = await resp.json();
     if (resp.ok && data.token) {
-      TOKEN = data.token;
-      localStorage.setItem('admin_token', TOKEN);
-      document.getElementById('loginOverlay').style.display = 'none';
-      document.getElementById('app').style.display = 'flex';
-      loadAll();
+      if (data.user.role !== 'Admin') {
+        errEl.textContent = 'Admin access required';
+        errEl.style.display = 'block';
+      } else {
+        TOKEN = data.token;
+        localStorage.setItem('admin_token', TOKEN);
+        document.getElementById('loginOverlay').style.display = 'none';
+        document.getElementById('app').style.display = 'flex';
+        loadAll();
+      }
     } else {
       errEl.textContent = data.error || 'Invalid credentials';
       errEl.style.display = 'block';
     }
-  } catch(e) { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
+  } catch(e) {
+    errEl.textContent = 'Network error — server may be waking up. Try again in 10s.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent = 'Sign In';
+    btn.disabled = false;
+  }
 }
 
 function logout() {
