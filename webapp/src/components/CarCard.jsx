@@ -12,74 +12,71 @@ export default function CarCard({ car }) {
   const rating = car.rating?.toFixed(1) || '0.0';
 
   return (
-    <Link to={`/cars/${car.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+    <Link to={`/cars/${car.id}`} className="no-underline text-inherit">
       <motion.div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         whileHover={{ y: -6 }}
         transition={{ duration: 0.3 }}
-        style={{
-          borderRadius: 20, overflow: 'hidden',
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          transition: 'border-color 0.3s',
-          borderColor: hovered ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)',
-        }}
+        className={`rounded-[20px] overflow-hidden bg-white/[0.04] border transition-colors duration-300 ${
+          hovered ? 'border-accent/20' : 'border-white/[0.06]'
+        }`}
       >
         {/* Image */}
-        <div style={{ position: 'relative', height: 200, background: '#151515', overflow: 'hidden' }}>
+        <div className="relative h-[200px] bg-[#151515] overflow-hidden">
           {photo ? (
-            <img src={photo} alt={name} style={{
-              width: '100%', height: '100%', objectFit: 'cover',
-              transform: hovered ? 'scale(1.05)' : 'scale(1)',
-              transition: 'transform 0.5s ease',
-            }} />
+            <img
+              src={photo}
+              alt={name}
+              className={`w-full h-full object-cover transition-transform duration-500 ease-out ${
+                hovered ? 'scale-105' : 'scale-100'
+              }`}
+            />
           ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333', fontSize: 48 }}>&#128663;</div>
+            <div className="w-full h-full flex items-center justify-center text-[#333] text-5xl">🚗</div>
           )}
 
           {/* Gradient overlay */}
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(transparent, rgba(0,0,0,0.6))' }} />
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-b from-transparent to-black/60" />
 
           {/* Favorite */}
-          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFav(!fav); }} style={{
-            position: 'absolute', top: 12, right: 12, width: 36, height: 36, borderRadius: 12,
-            background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFav(!fav); }}
+            className="absolute top-3 right-3 w-9 h-9 rounded-xl bg-black/40 backdrop-blur-md border-0 cursor-pointer flex items-center justify-center"
+          >
             <Heart size={16} fill={fav ? '#FF385C' : 'none'} color={fav ? '#FF385C' : 'white'} />
           </button>
 
           {/* Trip count */}
           {car.trip_count > 0 && (
-            <div style={{ position: 'absolute', bottom: 12, left: 12, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', color: 'white', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600 }}>
+            <div className="absolute bottom-3 left-3 bg-black/50 backdrop-blur-md text-white px-2.5 py-1 rounded-lg text-[11px] font-semibold">
               {car.trip_count} trip{car.trip_count === 1 ? '' : 's'}
             </div>
           )}
         </div>
 
         {/* Info */}
-        <div style={{ padding: '16px 18px 18px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'white' }}>{name}</h3>
+        <div className="px-[18px] pt-4 pb-[18px]">
+          <div className="flex justify-between items-start">
+            <h3 className="text-base font-bold m-0 text-white">{name}</h3>
             {Number(rating) > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div className="flex items-center gap-1">
                 <Star size={13} fill="#FFC107" color="#FFC107" />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{rating}</span>
+                <span className="text-[13px] font-bold text-white">{rating}</span>
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, color: 'var(--gray-500)', fontSize: 13 }}>
+          <div className="flex items-center gap-1 mt-1.5 text-gray-500 text-[13px]">
             <MapPin size={12} />
             <span>{car.location}</span>
           </div>
 
-          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent)' }}>
-              {"\u20A6"}{price}<span style={{ fontSize: 12, fontWeight: 500, color: 'var(--gray-500)' }}>/day</span>
+          <div className="mt-3.5 flex justify-between items-center">
+            <span className="text-lg font-extrabold text-accent">
+              ₦{price}<span className="text-xs font-medium text-gray-500">/day</span>
             </span>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="flex gap-1.5">
               <Tag>{car.seats || 5} seats</Tag>
               <Tag>{car.color}</Tag>
             </div>
@@ -91,5 +88,5 @@ export default function CarCard({ car }) {
 }
 
 function Tag({ children }) {
-  return <span style={{ background: 'rgba(255,255,255,0.06)', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, color: 'var(--gray-400)' }}>{children}</span>;
+  return <span className="bg-white/[0.06] px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-400">{children}</span>;
 }

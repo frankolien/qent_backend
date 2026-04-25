@@ -8,10 +8,10 @@ export default function BookingSuccess() {
 
   if (!state?.booking) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ color: 'var(--gray-500)', marginBottom: 16 }}>No booking found</p>
-          <Link to="/" style={{ color: 'var(--accent)', fontWeight: 600 }}>Go home</Link>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-500 mb-4">No booking found</p>
+          <Link to="/" className="text-accent font-semibold">Go home</Link>
         </div>
       </div>
     );
@@ -20,55 +20,49 @@ export default function BookingSuccess() {
   const { booking, car } = state;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div className="min-h-screen flex items-center justify-center p-6">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        style={{ textAlign: 'center', maxWidth: 480 }}
+        className="text-center max-w-[480px]"
       >
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', delay: 0.2, stiffness: 200 }}
         >
-          <div style={{
-            width: 80, height: 80, borderRadius: '50%',
-            background: 'rgba(34,197,94,0.1)', border: '2px solid rgba(34,197,94,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 28px',
-          }}>
+          <div className="w-20 h-20 rounded-full bg-accent/10 border-2 border-accent/30 flex items-center justify-center mx-auto mb-7">
             <CheckCircle size={36} color="var(--accent)" />
           </div>
         </motion.div>
 
-        <h1 style={{ fontSize: 32, fontWeight: 900, marginBottom: 12 }}>Booking Submitted!</h1>
-        <p style={{ color: 'var(--gray-500)', fontSize: 15, lineHeight: 1.7, marginBottom: 32 }}>
-          Your booking for <strong style={{ color: 'white' }}>{car?.make} {car?.model}</strong> has been sent to the host.
+        <h1 className="text-[32px] font-black mb-3">Booking Submitted!</h1>
+        <p className="text-gray-500 text-[15px] leading-relaxed mb-8">
+          Your booking for <strong className="text-white">{car?.make} {car?.model}</strong> has been sent to the host.
           You'll be notified once they accept.
         </p>
 
-        <div style={{
-          padding: 24, borderRadius: 20,
-          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-          textAlign: 'left', marginBottom: 32,
-        }}>
+        <div className="p-6 rounded-[20px] bg-white/[0.04] border border-white/[0.08] text-left mb-8">
           <Row label="Booking ID" value={`#${booking.id?.substring(0, 8)}`} />
           <Row label="Status" value="Pending Approval" accent />
           <Row label="Dates" value={`${booking.start_date} → ${booking.end_date}`} />
-          <Row label="Total" value={`\u20A6${Number(booking.total_amount).toLocaleString()}`} />
+          <Row label="Total" value={`₦${Number(booking.total_amount).toLocaleString()}`} />
         </div>
 
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button onClick={() => navigate('/')} style={{
-            flex: 1, padding: 16, background: 'rgba(255,255,255,0.06)', color: 'white',
-            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-          }}>Browse more</button>
-          <button onClick={() => navigate('/trips')} style={{
-            flex: 1, padding: 16, background: 'var(--accent)', color: 'var(--black)',
-            border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          }}>My trips <ArrowRight size={16} /></button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="flex-1 p-4 bg-white/[0.06] text-white border border-white/[0.08] rounded-2xl text-sm font-semibold cursor-pointer"
+          >
+            Browse more
+          </button>
+          <button
+            onClick={() => navigate('/trips')}
+            className="flex-1 p-4 bg-accent text-black rounded-2xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            My trips <ArrowRight size={16} />
+          </button>
         </div>
       </motion.div>
     </div>
@@ -77,9 +71,9 @@ export default function BookingSuccess() {
 
 function Row({ label, value, accent }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-      <span style={{ color: 'var(--gray-500)', fontSize: 13 }}>{label}</span>
-      <span style={{ color: accent ? 'var(--accent)' : 'white', fontSize: 13, fontWeight: 600 }}>{value}</span>
+    <div className="flex justify-between mb-3">
+      <span className="text-gray-500 text-[13px]">{label}</span>
+      <span className={`text-[13px] font-semibold ${accent ? 'text-accent' : 'text-white'}`}>{value}</span>
     </div>
   );
 }

@@ -179,6 +179,7 @@ async fn main() -> std::io::Result<()> {
                             .wrap(Governor::new(&auth_rate_limit))
                             .route("/signup", web::post().to(handlers::auth::sign_up))
                             .route("/signin", web::post().to(handlers::auth::sign_in))
+                            .route("/signin/apple", web::post().to(handlers::auth::sign_in_with_apple))
                             .route("/refresh", web::post().to(handlers::auth::refresh_token))
                             .route("/forgot-password", web::post().to(handlers::auth::forgot_password))
                             .route("/reset-password", web::post().to(handlers::auth::reset_password))
@@ -236,6 +237,7 @@ async fn main() -> std::io::Result<()> {
                                     .route("/initiate", web::post().to(handlers::payments::initiate_payment))
                                     .route("/withdraw", web::post().to(handlers::payments::withdraw))
                                     .route("/refund/{id}", web::post().to(handlers::payments::request_refund))
+                                    .route("/verify", web::post().to(handlers::payments::verify_payment))
                             )
                             // Saved Cards
                             .route("/cards", web::get().to(handlers::cards::list_cards))

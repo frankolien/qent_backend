@@ -25,7 +25,7 @@ pub async fn upload_file(
     while let Some(Ok(mut field)) = payload.next().await {
         let original_name = field
             .content_disposition()
-            .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
+            .and_then(|cd| cd.get_filename().map(String::from))
             .unwrap_or_else(|| "file".to_string());
 
         // Determine extension

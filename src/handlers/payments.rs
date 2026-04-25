@@ -290,6 +290,131 @@ pub async fn get_wallet_balance(req: HttpRequest, pool: web::Data<PgPool>) -> Ht
     }
 }
 
+/// POST /api/payments/verify — Verify a payment with Paystack after user returns from browser.
+/// This is the fallback for when the webhook can't reach the server (e.g., local dev).
+pub async fn verify_payment(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    config: web::Data<AppConfig>,
+    body: web::Json<serde_json::Value>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+    };
+
+    let reference = match body["reference"].as_str() {
+        Some(r) => r.to_string(),
+        None => return HttpResponse::BadRequest().json(serde_json::json!({"error": "Missing reference"})),
+    };
+
+    // Check if payment exists and belongs to this user
+    let payment = sqlx::query_as::<_, Payment>(
+        "SELECT * FROM payments WHERE provider_reference = $1 AND payer_id = $2",
+    )
+    .bind(&reference)
+    .bind(claims.sub)
+    .fetch_optional(pool.get_ref())
+    .await;
+
+    let payment = match payment {
+        Ok(Some(p)) => p,
+        Ok(None) => return HttpResponse::NotFound().json(serde_json::json!({"error": "Payment not found"})),
+        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+    };
+
+    // Already confirmed?
+    if payment.status == PaymentStatus::Success {
+        return HttpResponse::Ok().json(serde_json::json!({"status": "success", "message": "Payment already verified"}));
+    }
+
+    // Verify with Paystack
+    let client = reqwest::Client::new();
+    let verify_resp = client
+        .get(format!("https://api.paystack.co/transaction/verify/{}", reference))
+        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .send()
+        .await;
+
+    let paystack_data = match verify_resp {
+        Ok(resp) => resp.json::<serde_json::Value>().await.unwrap_or_default(),
+        Err(e) => return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": format!("Paystack error: {}", e)})),
+    };
+
+    let paystack_status = paystack_data["data"]["status"].as_str().unwrap_or("");
+
+    if paystack_status != "success" {
+        return HttpResponse::Ok().json(serde_json::json!({
+            "status": "pending",
+            "message": format!("Payment status: {}", paystack_status),
+        }));
+    }
+
+    // Payment confirmed — update payment status
+    let _ = sqlx::query(
+        "UPDATE payments SET status = $1 WHERE id = $2",
+    )
+    .bind(PaymentStatus::Success)
+    .bind(payment.id)
+    .execute(pool.get_ref())
+    .await;
+
+    // Update booking to confirmed
+    let _ = sqlx::query(
+        "UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2",
+    )
+    .bind(BookingStatus::Confirmed)
+    .bind(payment.booking_id)
+    .execute(pool.get_ref())
+    .await;
+
+    // Get booking for notification
+    if let Ok(Some(booking)) = sqlx::query_as::<_, Booking>(
+        "SELECT * FROM bookings WHERE id = $1",
+    )
+    .bind(payment.booking_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        let renter_name = sqlx::query_scalar::<_, String>(
+            "SELECT full_name FROM users WHERE id = $1",
+        )
+        .bind(claims.sub)
+        .fetch_one(pool.get_ref())
+        .await
+        .unwrap_or_else(|_| "Someone".to_string());
+
+        let car_name = sqlx::query_scalar::<_, String>(
+            "SELECT CONCAT(make, ' ', model, ' ', year) FROM cars WHERE id = $1",
+        )
+        .bind(booking.car_id)
+        .fetch_one(pool.get_ref())
+        .await
+        .unwrap_or_else(|_| "your car".to_string());
+
+        // Notify host
+        let _ = sqlx::query(
+            r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, data, created_at)
+            VALUES ($1, $2, $3, $4, $5, false, $6, NOW())"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(booking.host_id)
+        .bind("Payment Confirmed!")
+        .bind(format!("{} has paid for your {} — ready for pickup.", renter_name, car_name))
+        .bind("booking_confirmed")
+        .bind(serde_json::json!({
+            "booking_id": booking.id,
+            "car_id": booking.car_id,
+            "renter_id": claims.sub,
+        }))
+        .execute(pool.get_ref())
+        .await;
+    }
+
+    HttpResponse::Ok().json(serde_json::json!({"status": "success", "message": "Payment verified and booking confirmed"}))
+}
+
 pub async fn get_wallet_transactions(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,

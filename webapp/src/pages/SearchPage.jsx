@@ -44,34 +44,32 @@ export default function SearchPage() {
   const handleSubmit = (e) => { e.preventDefault(); doSearch(); };
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '100px 32px 80px' }}>
+    <div className="max-w-[1280px] mx-auto pt-[100px] px-8 pb-20">
       {/* Search bar */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, marginBottom: 32 }}>
-          <div style={{
-            flex: 1, display: 'flex', alignItems: 'center',
-            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 16, padding: '0 20px',
-          }}>
+        <form onSubmit={handleSubmit} className="flex gap-3 mb-8">
+          <div className="flex-1 flex items-center bg-white/5 border border-white/[0.08] rounded-2xl px-5">
             <Search size={18} color="var(--gray-500)" />
             <input
               value={query} onChange={e => setQuery(e.target.value)}
               placeholder="Search by location, brand, model..."
-              style={{ flex: 1, border: 'none', background: 'none', padding: '16px 14px', fontSize: 15, color: 'white', outline: 'none', fontFamily: 'inherit' }}
+              className="flex-1 border-0 bg-transparent px-3.5 py-4 text-[15px] text-white outline-none"
             />
-            {query && <X size={16} color="var(--gray-500)" style={{ cursor: 'pointer' }} onClick={() => { setQuery(''); }} />}
+            {query && <X size={16} color="var(--gray-500)" className="cursor-pointer" onClick={() => setQuery('')} />}
           </div>
-          <button type="submit" style={{
-            padding: '0 28px', background: 'var(--accent)', border: 'none',
-            borderRadius: 16, fontSize: 14, fontWeight: 700, color: 'var(--black)', fontFamily: 'inherit', cursor: 'pointer',
-          }}>Search</button>
-          <button type="button" onClick={() => setShowFilters(!showFilters)} style={{
-            width: 52, height: 52, borderRadius: 16,
-            background: showFilters ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            color: showFilters ? 'var(--black)' : 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-          }}>
+          <button
+            type="submit"
+            className="px-7 bg-accent border-0 rounded-2xl text-sm font-bold text-black cursor-pointer"
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`w-[52px] h-[52px] rounded-2xl border border-white/[0.08] flex items-center justify-center cursor-pointer ${
+              showFilters ? 'bg-accent text-black' : 'bg-white/5 text-white'
+            }`}
+          >
             <SlidersHorizontal size={18} />
           </button>
         </form>
@@ -80,56 +78,60 @@ export default function SearchPage() {
         {showFilters && (
           <motion.div
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-            style={{
-              display: 'flex', gap: 16, marginBottom: 32, padding: 20, borderRadius: 20,
-              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-              flexWrap: 'wrap', alignItems: 'flex-end',
-            }}
+            className="flex gap-4 mb-8 p-5 rounded-[20px] bg-white/[0.03] border border-white/[0.06] flex-wrap items-end"
           >
             <FilterInput label="Min Price" value={minPrice} onChange={setMinPrice} placeholder="e.g. 10000" />
             <FilterInput label="Max Price" value={maxPrice} onChange={setMaxPrice} placeholder="e.g. 100000" />
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-400)', display: 'block', marginBottom: 6 }}>Sort By</label>
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{
-                padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.04)', color: 'white', fontSize: 13, fontFamily: 'inherit', outline: 'none',
-              }}>
-                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: '#1A1A1A' }}>{o.label}</option>)}
+              <label className="text-xs font-semibold text-gray-400 block mb-1.5">Sort By</label>
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="px-4 py-3 rounded-xl border border-white/[0.08] bg-white/[0.04] text-white text-[13px] outline-none"
+              >
+                {SORT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value} style={{ background: '#1A1A1A' }}>{o.label}</option>
+                ))}
               </select>
             </div>
-            <button onClick={doSearch} style={{
-              padding: '12px 24px', background: 'var(--accent)', color: 'var(--black)',
-              border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-            }}>Apply</button>
+            <button
+              onClick={doSearch}
+              className="px-6 py-3 bg-accent text-black border-0 rounded-xl text-[13px] font-bold cursor-pointer"
+            >
+              Apply
+            </button>
           </motion.div>
         )}
 
         {/* Sort pills */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
+        <div className="flex gap-2 mb-7 flex-wrap">
           {SORT_OPTIONS.map(o => (
-            <button key={o.value} onClick={() => setSortBy(o.value)} style={{
-              padding: '8px 18px', borderRadius: 100, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              background: sortBy === o.value ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
-              color: sortBy === o.value ? 'var(--black)' : 'var(--gray-400)',
-              fontSize: 13, fontWeight: 600, transition: 'all 0.2s',
-            }}>{o.label}</button>
+            <button
+              key={o.value}
+              onClick={() => setSortBy(o.value)}
+              className={`px-[18px] py-2 rounded-full border-0 cursor-pointer text-[13px] font-semibold transition-all duration-200 ${
+                sortBy === o.value ? 'bg-accent text-black' : 'bg-white/5 text-gray-400'
+              }`}
+            >
+              {o.label}
+            </button>
           ))}
         </div>
       </motion.div>
 
       {/* Results */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 80, color: 'var(--gray-500)' }}>Searching...</div>
+        <div className="text-center py-20 text-gray-500">Searching...</div>
       ) : cars.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 80 }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>&#128663;</div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>No cars found</h2>
-          <p style={{ color: 'var(--gray-500)', fontSize: 14 }}>Try adjusting your search or filters</p>
+        <div className="text-center py-20">
+          <div className="text-5xl mb-4">🚗</div>
+          <h2 className="text-[22px] font-bold mb-2">No cars found</h2>
+          <p className="text-gray-500 text-sm">Try adjusting your search or filters</p>
         </div>
       ) : (
         <>
-          <p style={{ color: 'var(--gray-500)', fontSize: 14, marginBottom: 20 }}>{cars.length} car{cars.length === 1 ? '' : 's'} found</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+          <p className="text-gray-500 text-sm mb-5">{cars.length} car{cars.length === 1 ? '' : 's'} found</p>
+          <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
             {cars.map(car => <CarCard key={car.id} car={car} />)}
           </div>
         </>
@@ -141,11 +143,13 @@ export default function SearchPage() {
 function FilterInput({ label, value, onChange, placeholder }) {
   return (
     <div>
-      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-400)', display: 'block', marginBottom: 6 }}>{label}</label>
-      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{
-        padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.04)', color: 'white', fontSize: 13, fontFamily: 'inherit', outline: 'none', width: 140,
-      }} />
+      <label className="text-xs font-semibold text-gray-400 block mb-1.5">{label}</label>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="px-4 py-3 rounded-xl border border-white/[0.08] bg-white/[0.04] text-white text-[13px] outline-none w-[140px]"
+      />
     </div>
   );
 }
