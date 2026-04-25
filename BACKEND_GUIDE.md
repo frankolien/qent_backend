@@ -22,7 +22,7 @@ Written for a developer who knows JavaScript/Dart but is learning Rust by unders
 - [Part 12: Deployment & Configuration](#part-12-deployment--configuration)
 - [Part 13: Common Patterns Reference](#part-13-common-patterns-reference)
 
----
+----------
 
 # Part 1: Rust Fundamentals You Need
 
