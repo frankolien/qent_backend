@@ -69,7 +69,6 @@ export default function ChatDetail() {
     }
   }, [id]);
 
-  // Load conversation name
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
     getConversations()
@@ -86,15 +85,12 @@ export default function ChatDetail() {
       .catch(() => {});
   }, [id, user]);
 
-  // Initial load + polling
   useEffect(() => {
     fetchMessages(false);
-
     pollingRef.current = setInterval(() => fetchMessages(true), 5000);
     return () => clearInterval(pollingRef.current);
   }, [fetchMessages]);
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -103,7 +99,6 @@ export default function ChatDetail() {
     const content = input.trim();
     if (!content || sending) return;
 
-    // Optimistic update
     const optimistic = {
       id: 'opt-' + Date.now(),
       sender_id: user?.id,
@@ -120,7 +115,6 @@ export default function ChatDetail() {
       await sendMessage(id, content);
       await fetchMessages(true);
     } catch {
-      // Remove optimistic message on failure
       setMessages(prev => prev.filter(m => m.id !== optimistic.id));
       setInput(content);
       setError('Failed to send message');
@@ -136,85 +130,64 @@ export default function ChatDetail() {
   };
 
   const grouped = groupByDate(messages);
+  const inputReady = input.trim() && !sending;
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', height: '100vh',
-      background: '#0A0A0A', fontFamily: 'Inter, sans-serif',
-    }}>
+    <div className="flex flex-col h-screen bg-black font-sans">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-          padding: '16px 24px',
-          background: 'rgba(10,10,10,0.9)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
-          display: 'flex', alignItems: 'center', gap: 14,
-        }}
+        className="fixed top-0 left-0 right-0 z-[100] px-6 py-4 bg-black/90 backdrop-blur-nav border-b border-white/[0.07] flex items-center gap-3.5"
       >
-        <button onClick={() => navigate('/messages')} style={iconBtn}>
+        <button
+          onClick={() => navigate('/messages')}
+          className="w-[38px] h-[38px] rounded-xl flex-shrink-0 bg-white/[0.06] border border-white/[0.08] text-white cursor-pointer flex items-center justify-center"
+        >
           <ArrowLeft size={18} />
         </button>
-        <div style={{
-          width: 38, height: 38, borderRadius: 12,
-          background: 'linear-gradient(135deg, rgba(34,197,94,0.3), rgba(34,197,94,0.1))',
-          border: '1px solid rgba(34,197,94,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14, fontWeight: 700, color: 'var(--accent)', flexShrink: 0,
-        }}>
+        <div
+          className="w-[38px] h-[38px] rounded-xl border border-accent/20 flex items-center justify-center text-sm font-bold text-accent flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.3), rgba(34,197,94,0.1))' }}
+        >
           {otherName[0]?.toUpperCase() || '?'}
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{otherName}</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+        <div className="flex-1">
+          <div className="text-base font-bold text-white">{otherName}</div>
+          <div className="text-[11px] text-white/40">
             {loading ? 'Loading…' : `${messages.length} message${messages.length !== 1 ? 's' : ''}`}
           </div>
         </div>
       </motion.div>
 
       {/* Messages */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '80px 16px 100px',
-        display: 'flex', flexDirection: 'column',
-      }}>
+      <div className="flex-1 overflow-y-auto pt-20 px-4 pb-[100px] flex flex-col">
         {error && (
-          <div style={{ ...errorBox, margin: '0 0 16px', alignSelf: 'center', maxWidth: 400 }}>{error}</div>
+          <div className="bg-red-500/10 text-red-500 px-3.5 py-2.5 rounded-xl text-[13px] font-medium border border-red-500/20 mb-4 self-center max-w-[400px]">
+            {error}
+          </div>
         )}
 
         {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 16 }}>
-            <div style={spinnerStyle} />
-            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Loading messages…</p>
+          <div className="flex flex-col items-center justify-center flex-1 gap-4">
+            <div className="spinner-sm" />
+            <p className="text-white/40 text-sm">Loading messages…</p>
           </div>
         ) : messages.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 16 }}>
-            <div style={{
-              width: 64, height: 64, borderRadius: 20,
-              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
+          <div className="flex flex-col items-center justify-center flex-1 gap-4">
+            <div className="w-16 h-16 rounded-[20px] bg-accent/[0.08] border border-accent/15 flex items-center justify-center">
               <MessageSquare size={28} color="rgba(34,197,94,0.5)" />
             </div>
-            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, textAlign: 'center' }}>
-              No messages yet. Say hello!
-            </p>
+            <p className="text-white/40 text-sm text-center">No messages yet. Say hello!</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 700, width: '100%', alignSelf: 'center' }}>
+          <div className="flex flex-col gap-1 max-w-[700px] w-full self-center">
             <AnimatePresence initial={false}>
               {grouped.map(item => {
                 if (item.type === 'header') {
                   return (
-                    <div key={item.key} style={{ textAlign: 'center', margin: '16px 0 8px' }}>
-                      <span style={{
-                        padding: '4px 12px', borderRadius: 100,
-                        background: 'rgba(255,255,255,0.06)',
-                        fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600,
-                      }}>
+                    <div key={item.key} className="text-center mt-4 mb-2">
+                      <span className="px-3 py-1 rounded-full bg-white/[0.06] text-[11px] text-white/40 font-semibold">
                         {fmtDateHeader(item.date)}
                       </span>
                     </div>
@@ -229,31 +202,24 @@ export default function ChatDetail() {
                     animate={{ opacity: item.optimistic ? 0.7 : 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    style={{
-                      display: 'flex',
-                      justifyContent: isMine ? 'flex-end' : 'flex-start',
-                      marginBottom: 2,
-                    }}
+                    className={`flex mb-0.5 ${isMine ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div style={{ maxWidth: '72%' }}>
-                      <div style={{
-                        padding: '10px 14px', borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                        background: isMine
-                          ? 'linear-gradient(135deg, #22C55E, #16A34A)'
-                          : 'rgba(255,255,255,0.07)',
-                        color: isMine ? '#0A0A0A' : 'white',
-                        fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word',
-                        border: isMine ? 'none' : '1px solid rgba(255,255,255,0.08)',
-                      }}>
+                    <div className="max-w-[72%]">
+                      <div
+                        className={`px-3.5 py-2.5 text-sm leading-relaxed break-words ${
+                          isMine
+                            ? 'text-black rounded-[18px_18px_4px_18px]'
+                            : 'bg-white/[0.07] text-white border border-white/[0.08] rounded-[18px_18px_18px_4px]'
+                        }`}
+                        style={isMine ? { background: 'linear-gradient(135deg, #22C55E, #16A34A)' } : undefined}
+                      >
                         {item.content}
                       </div>
-                      <div style={{
-                        fontSize: 10, color: 'rgba(255,255,255,0.3)',
-                        marginTop: 3,
-                        textAlign: isMine ? 'right' : 'left',
-                        paddingLeft: isMine ? 0 : 4,
-                        paddingRight: isMine ? 4 : 0,
-                      }}>
+                      <div
+                        className={`text-[10px] text-white/30 mt-0.5 ${
+                          isMine ? 'text-right pr-1' : 'text-left pl-1'
+                        }`}
+                      >
                         {fmtTime(item.created_at)}
                       </div>
                     </div>
@@ -267,79 +233,32 @@ export default function ChatDetail() {
       </div>
 
       {/* Input bar */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        padding: '12px 16px 20px',
-        background: 'rgba(10,10,10,0.95)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        borderTop: '1px solid rgba(255,255,255,0.07)',
-      }}>
-        <div style={{
-          maxWidth: 700, margin: '0 auto',
-          display: 'flex', gap: 10, alignItems: 'flex-end',
-        }}>
+      <div className="fixed bottom-0 left-0 right-0 px-4 pt-3 pb-5 bg-black/95 backdrop-blur-nav border-t border-white/[0.07]">
+        <div className="max-w-[700px] mx-auto flex gap-2.5 items-end">
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => {
               setInput(e.target.value);
-              // Auto-resize
               e.target.style.height = 'auto';
               e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
             }}
             onKeyDown={handleKeyDown}
             placeholder="Type a message…"
             rows={1}
-            style={{
-              flex: 1, padding: '12px 16px', borderRadius: 18,
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'white', fontSize: 14, outline: 'none',
-              fontFamily: 'inherit', resize: 'none', lineHeight: 1.5,
-              maxHeight: 120, overflowY: 'auto',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={e => e.target.style.borderColor = 'rgba(34,197,94,0.4)'}
-            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            className="flex-1 px-4 py-3 rounded-[18px] bg-white/[0.07] border border-white/10 text-white text-sm outline-none resize-none leading-relaxed max-h-[120px] overflow-y-auto transition-colors focus:border-accent/40"
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || sending}
-            style={{
-              width: 46, height: 46, borderRadius: 16, flexShrink: 0,
-              background: input.trim() && !sending ? '#22C55E' : 'rgba(255,255,255,0.08)',
-              border: 'none', cursor: input.trim() && !sending ? 'pointer' : 'not-allowed',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.2s',
-            }}
+            disabled={!inputReady}
+            className={`w-[46px] h-[46px] rounded-2xl flex-shrink-0 border-0 flex items-center justify-center transition-all duration-200 ${
+              inputReady ? 'bg-accent cursor-pointer' : 'bg-white/[0.08] cursor-not-allowed'
+            }`}
           >
-            <Send size={18} color={input.trim() && !sending ? '#0A0A0A' : 'rgba(255,255,255,0.3)'} />
+            <Send size={18} color={inputReady ? '#0A0A0A' : 'rgba(255,255,255,0.3)'} />
           </button>
         </div>
       </div>
     </div>
   );
 }
-
-// ─── Shared styles ───────────────────────────────────────────────────────────
-
-const iconBtn = {
-  width: 38, height: 38, borderRadius: 12, flexShrink: 0,
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-  color: 'white', cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-};
-
-const errorBox = {
-  background: 'rgba(239,68,68,0.1)', color: '#EF4444',
-  padding: '10px 14px', borderRadius: 12, fontSize: 13,
-  fontWeight: 500, border: '1px solid rgba(239,68,68,0.2)',
-};
-
-const spinnerStyle = {
-  width: 32, height: 32, borderRadius: '50%',
-  border: '3px solid rgba(255,255,255,0.08)',
-  borderTopColor: '#22C55E',
-  animation: 'spin 0.8s linear infinite',
-};

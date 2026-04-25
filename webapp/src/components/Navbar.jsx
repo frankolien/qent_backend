@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import Logo from './Logo';
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
@@ -22,27 +22,26 @@ export default function Navbar() {
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5 }}
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-        padding: '16px 0',
-        background: scrolled ? 'rgba(10,10,10,0.8)' : 'transparent',
-        backdropFilter: scrolled ? 'blur(24px)' : 'none',
-        WebkitBackdropFilter: scrolled ? 'blur(24px)' : 'none',
-        borderBottom: scrolled ? '1px solid rgba(255,255,255,0.06)' : 'none',
-        transition: 'all 0.3s ease',
-      }}
+      className={`fixed top-0 left-0 right-0 z-[100] py-4 transition-all duration-300 ${
+        scrolled
+          ? 'bg-black/80 backdrop-blur-nav border-b border-white/[0.06]'
+          : 'bg-transparent border-b-0'
+      }`}
     >
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+      <div className="max-w-[1280px] mx-auto px-8 flex justify-between items-center">
+        <Link to="/" className="flex items-center gap-2.5 no-underline">
           <Logo variant="full" size={36} />
         </Link>
 
         {/* Center nav links */}
-        <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+        <div className="flex items-center gap-8">
           <NavLink href="#cars" active={isHome}>Browse</NavLink>
           <NavLink href="#how-it-works">How it works</NavLink>
           {user ? (
-            <Link to="/dashboard" style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.5)', transition: 'color 0.2s', cursor: 'pointer', textDecoration: 'none' }}>
+            <Link
+              to="/dashboard"
+              className="text-sm font-medium text-white/50 cursor-pointer no-underline transition-colors hover:text-white"
+            >
               Partnership
             </Link>
           ) : (
@@ -51,34 +50,35 @@ export default function Navbar() {
         </div>
 
         {/* Right */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="flex items-center gap-3">
           {user ? (
             <>
-              <Link to="/trips" style={pillStyle}>My trips</Link>
+              <Link
+                to="/trips"
+                className="px-[18px] py-2 text-[13px] font-semibold text-white bg-white/[0.08] border border-white/10 rounded-full"
+              >
+                My trips
+              </Link>
               <div
                 onClick={() => navigate('/profile')}
-                style={{
-                  width: 38, height: 38, borderRadius: 12,
-                  background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', overflow: 'hidden',
-                }}
+                className="w-[38px] h-[38px] rounded-xl bg-white/10 border border-white/10 flex items-center justify-center cursor-pointer overflow-hidden"
               >
                 {user.profile_photo_url ? (
-                  <img src={user.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={user.profile_photo_url} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  <span style={{ fontSize: 14, fontWeight: 700 }}>{user.full_name?.[0]}</span>
+                  <span className="text-sm font-bold">{user.full_name?.[0]}</span>
                 )}
               </div>
             </>
           ) : (
             <>
-              <Link to="/login" style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.7)', padding: '8px 16px' }}>Log in</Link>
-              <Link to="/signup" style={{
-                padding: '10px 24px', fontSize: 14, fontWeight: 600,
-                background: 'var(--accent)', color: 'var(--black)',
-                borderRadius: 100, transition: 'transform 0.2s',
-              }}>Get Started</Link>
+              <Link to="/login" className="text-sm font-medium text-white/70 px-4 py-2">Log in</Link>
+              <Link
+                to="/signup"
+                className="px-6 py-2.5 text-sm font-semibold bg-accent text-black rounded-full transition-transform hover:scale-105"
+              >
+                Get Started
+              </Link>
             </>
           )}
         </div>
@@ -95,7 +95,6 @@ function NavLink({ href, active, children }) {
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     } else {
-      // Use React Router to navigate without full page reload
       navigate('/');
       setTimeout(() => {
         const target = document.querySelector(href);
@@ -105,16 +104,14 @@ function NavLink({ href, active, children }) {
   };
 
   return (
-    <a href={href} onClick={handleClick} style={{
-      fontSize: 14, fontWeight: 500,
-      color: active ? 'white' : 'rgba(255,255,255,0.5)',
-      transition: 'color 0.2s', cursor: 'pointer',
-    }}>{children}</a>
+    <a
+      href={href}
+      onClick={handleClick}
+      className={`text-sm font-medium cursor-pointer transition-colors hover:text-white ${
+        active ? 'text-white' : 'text-white/50'
+      }`}
+    >
+      {children}
+    </a>
   );
 }
-
-const pillStyle = {
-  padding: '8px 18px', fontSize: 13, fontWeight: 600,
-  background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 100, color: 'white',
-};

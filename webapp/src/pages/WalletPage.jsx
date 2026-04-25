@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
   Wallet, ArrowDownLeft, ArrowUpRight, TrendingUp, Clock,
-  DollarSign, ArrowLeft, AlertCircle, CheckCircle, XCircle,
-  Download,
+  DollarSign, ArrowLeft, CheckCircle, Download,
 } from 'lucide-react';
 import api, { getWallet, getTransactions, getEarnings } from '../utils/api';
 import { useAuth } from '../hooks/useAuth';
@@ -26,13 +25,13 @@ function fmtTime(d) {
 }
 
 const TX_TYPE_META = {
-  credit:      { label: 'Credit',      color: '#22C55E', bg: 'rgba(34,197,94,0.1)',  icon: ArrowDownLeft,   sign: '+' },
-  debit:       { label: 'Debit',       color: '#EF4444', bg: 'rgba(239,68,68,0.1)',  icon: ArrowUpRight,    sign: '-' },
-  booking:     { label: 'Booking',     color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', icon: DollarSign,      sign: '-' },
-  earning:     { label: 'Earning',     color: '#22C55E', bg: 'rgba(34,197,94,0.1)',  icon: ArrowDownLeft,   sign: '+' },
-  withdrawal:  { label: 'Withdrawal',  color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', icon: ArrowUpRight,    sign: '-' },
-  refund:      { label: 'Refund',      color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)', icon: ArrowDownLeft,   sign: '+' },
-  platform_fee:{ label: 'Platform Fee',color: '#6B7280', bg: 'rgba(107,114,128,0.1)',icon: DollarSign,      sign: '-' },
+  credit:      { label: 'Credit',      color: '#22C55E', bg: 'rgba(34,197,94,0.1)',  icon: ArrowDownLeft, sign: '+' },
+  debit:       { label: 'Debit',       color: '#EF4444', bg: 'rgba(239,68,68,0.1)',  icon: ArrowUpRight,  sign: '-' },
+  booking:     { label: 'Booking',     color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', icon: DollarSign,    sign: '-' },
+  earning:     { label: 'Earning',     color: '#22C55E', bg: 'rgba(34,197,94,0.1)',  icon: ArrowDownLeft, sign: '+' },
+  withdrawal:  { label: 'Withdrawal',  color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', icon: ArrowUpRight,  sign: '-' },
+  refund:      { label: 'Refund',      color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)', icon: ArrowDownLeft, sign: '+' },
+  platform_fee:{ label: 'Platform Fee',color: '#6B7280', bg: 'rgba(107,114,128,0.1)',icon: DollarSign,    sign: '-' },
 };
 
 function getTxMeta(tx) {
@@ -105,80 +104,78 @@ export default function WalletPage() {
     .filter(t => (t.transaction_type || t.type || '').toLowerCase() === 'platform_fee')
     .reduce((sum, t) => sum + (t.amount || 0), 0);
   const tripCount = earningsStats?.completed_trips || 0;
+  const canWithdraw = wallet?.balance > 0;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      style={{ maxWidth: 800, margin: '0 auto', padding: '100px 24px 80px' }}
+      className="max-w-[800px] mx-auto pt-[100px] px-6 pb-20"
     >
-      {/* Header */}
-      <button onClick={() => navigate(-1)} style={backBtn}>
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center justify-center w-10 h-10 rounded-xl mb-5 bg-white/[0.06] border border-white/[0.08] text-white cursor-pointer"
+      >
         <ArrowLeft size={18} />
       </button>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
+      <div className="flex items-center gap-2.5 mb-8">
         <Wallet size={24} color="var(--accent)" />
-        <h1 style={{ fontSize: 30, fontWeight: 900, letterSpacing: -1, margin: 0 }}>Wallet</h1>
+        <h1 className="text-[30px] font-black tracking-tighter m-0">Wallet</h1>
       </div>
 
-      {error && <div style={errorBox}>{error}</div>}
+      {error && (
+        <div className="bg-red-500/10 text-red-500 px-4 py-3 rounded-2xl text-[13px] font-medium mb-4 border border-red-500/20 flex items-center gap-2">
+          {error}
+        </div>
+      )}
       {success && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ ...successBox, marginBottom: 16 }}
+          className="bg-accent/10 text-accent px-4 py-3 rounded-2xl text-[13px] font-medium border border-accent/20 flex items-center gap-2 mb-4"
         >
           <CheckCircle size={15} /> {success}
         </motion.div>
       )}
 
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '80px 0', gap: 16 }}>
-          <div style={spinnerStyle} />
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Loading wallet…</p>
+        <div className="flex flex-col items-center py-20 gap-4">
+          <div className="spinner" />
+          <p className="text-white/40 text-sm">Loading wallet…</p>
         </div>
       ) : (
         <>
-          {/* ── Balance card ─────────────────────────────────── */}
+          {/* Balance card */}
           <FadeIn>
-            <div style={{
-              padding: '32px', borderRadius: 28, marginBottom: 16,
-              background: 'linear-gradient(135deg, #0D1F13 0%, #0A0A0A 100%)',
-              border: '1px solid rgba(34,197,94,0.25)',
-              position: 'relative', overflow: 'hidden',
-            }}>
-              {/* Decorative glow */}
-              <div style={{
-                position: 'absolute', top: -60, right: -60, width: 200, height: 200,
-                borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,197,94,0.12) 0%, transparent 70%)',
-                pointerEvents: 'none',
-              }} />
+            <div
+              className="p-8 rounded-[28px] mb-4 border border-accent/25 relative overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, #0D1F13 0%, #0A0A0A 100%)' }}
+            >
+              <div
+                className="absolute -top-[60px] -right-[60px] w-[200px] h-[200px] rounded-full pointer-events-none"
+                style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.12) 0%, transparent 70%)' }}
+              />
 
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10 }}>Available Balance</p>
-              <div style={{ fontSize: 48, fontWeight: 900, color: '#22C55E', letterSpacing: -2, marginBottom: 6 }}>
+              <p className="text-white/50 text-xs font-bold uppercase tracking-[1.5px] mb-2.5">Available Balance</p>
+              <div className="text-5xl font-black text-accent tracking-[-2px] mb-1.5">
                 {fmtMoney(wallet?.balance || 0)}
               </div>
               {pendingBalance > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+                <div className="flex items-center gap-1 text-white/40 text-[13px]">
                   <Clock size={13} /> {fmtMoney(pendingBalance)} pending
                 </div>
               )}
 
               <button
                 onClick={handleWithdraw}
-                disabled={withdrawing || !wallet?.balance || wallet.balance <= 0}
-                style={{
-                  marginTop: 24, display: 'inline-flex', alignItems: 'center', gap: 8,
-                  padding: '13px 24px', borderRadius: 14,
-                  background: wallet?.balance > 0 ? '#22C55E' : 'rgba(255,255,255,0.08)',
-                  color: wallet?.balance > 0 ? '#0A0A0A' : 'rgba(255,255,255,0.3)',
-                  border: 'none', fontSize: 14, fontWeight: 700,
-                  cursor: (withdrawing || !wallet?.balance || wallet.balance <= 0) ? 'not-allowed' : 'pointer',
-                  fontFamily: 'inherit', transition: 'all 0.2s',
-                  opacity: withdrawing ? 0.7 : 1,
-                }}
+                disabled={withdrawing || !canWithdraw}
+                className={`mt-6 inline-flex items-center gap-2 px-6 py-[13px] rounded-2xl border-0 text-sm font-bold transition-all duration-200 ${
+                  canWithdraw ? 'bg-accent text-black' : 'bg-white/[0.08] text-white/30'
+                } ${
+                  (withdrawing || !canWithdraw) ? 'cursor-not-allowed' : 'cursor-pointer'
+                } ${withdrawing ? 'opacity-70' : 'opacity-100'}`}
               >
                 <Download size={16} />
                 {withdrawing ? 'Processing…' : 'Withdraw to Bank'}
@@ -186,9 +183,9 @@ export default function WalletPage() {
             </div>
           </FadeIn>
 
-          {/* ── Stats row ─────────────────────────────────────── */}
+          {/* Stats row */}
           <FadeIn delay={0.1}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
+            <div className="grid grid-cols-3 gap-3 mb-8">
               <StatCard
                 icon={<Clock size={16} color="#F59E0B" />}
                 label="Pending"
@@ -216,22 +213,19 @@ export default function WalletPage() {
             </div>
           </FadeIn>
 
-          {/* ── Tabs ──────────────────────────────────────────── */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 4 }}>
+          {/* Tabs */}
+          <div className="flex gap-1 mb-5 bg-white/[0.04] rounded-2xl p-1">
             {TABS.map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                style={{
-                  flex: 1, padding: '10px', borderRadius: 11, fontSize: 13, fontWeight: 700,
-                  background: tab === t ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  color: tab === t ? 'white' : 'rgba(255,255,255,0.4)',
-                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                  transition: 'all 0.2s',
-                }}
+                className={`flex-1 p-2.5 rounded-[11px] text-[13px] font-bold border-0 cursor-pointer transition-all duration-200 ${
+                  tab === t ? 'bg-white/10 text-white' : 'bg-transparent text-white/40'
+                }`}
               >
-                {t} {tab !== t && (
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+                {t}
+                {tab !== t && (
+                  <span className="text-[11px] text-white/30 ml-1">
                     ({t === 'Transactions' ? transactions.length : earnings.length})
                   </span>
                 )}
@@ -239,14 +233,14 @@ export default function WalletPage() {
             ))}
           </div>
 
-          {/* ── List ──────────────────────────────────────────── */}
+          {/* List */}
           <AnimatePresence mode="wait">
             {tab === 'Transactions' ? (
               <motion.div key="tx" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
                 {transactions.length === 0 ? (
                   <EmptyList icon={<DollarSign size={28} color="rgba(255,255,255,0.15)" />} text="No transactions yet" />
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div className="flex flex-col gap-0.5">
                     {transactions.map((tx, i) => (
                       <TxRow key={tx.id || i} tx={tx} index={i} />
                     ))}
@@ -258,7 +252,7 @@ export default function WalletPage() {
                 {earnings.length === 0 ? (
                   <EmptyList icon={<TrendingUp size={28} color="rgba(255,255,255,0.15)" />} text="No earnings yet" />
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div className="flex flex-col gap-0.5">
                     {earnings.map((e, i) => (
                       <EarningRow key={e.id || i} earning={e} index={i} />
                     ))}
@@ -273,8 +267,6 @@ export default function WalletPage() {
   );
 }
 
-// ─── Transaction Row ─────────────────────────────────────────────────────────
-
 function TxRow({ tx, index }) {
   const [hovered, setHovered] = useState(false);
   const meta = getTxMeta(tx);
@@ -288,36 +280,30 @@ function TxRow({ tx, index }) {
       transition={{ delay: index * 0.04 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-        borderRadius: 14, cursor: 'default',
-        background: hovered ? 'rgba(255,255,255,0.04)' : 'transparent',
-        transition: 'background 0.15s',
-      }}
+      className={`flex items-center gap-3.5 px-4 py-3.5 rounded-2xl cursor-default transition-colors duration-150 ${
+        hovered ? 'bg-white/[0.04]' : 'bg-transparent'
+      }`}
     >
-      <div style={{
-        width: 42, height: 42, borderRadius: 14, flexShrink: 0,
-        background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
+      <div
+        className="w-[42px] h-[42px] rounded-2xl flex-shrink-0 flex items-center justify-center"
+        style={{ background: meta.bg }}
+      >
         <TxIcon size={18} color={meta.color} />
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 3 }}>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-white mb-[3px]">
           {tx.description || meta.label}
         </div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+        <div className="text-xs text-white/40">
           {fmtDate(tx.created_at)} {fmtTime(tx.created_at) && '· ' + fmtTime(tx.created_at)}
         </div>
       </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{
-          fontSize: 16, fontWeight: 800,
-          color: isCredit ? '#22C55E' : '#EF4444',
-        }}>
+      <div className="text-right flex-shrink-0">
+        <div className={`text-base font-extrabold ${isCredit ? 'text-accent' : 'text-red-500'}`}>
           {meta.sign}{fmtMoney(tx.amount)}
         </div>
         {tx.status && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2, textTransform: 'capitalize' }}>
+          <div className="text-[11px] text-white/35 mt-0.5 capitalize">
             {tx.status}
           </div>
         )}
@@ -325,8 +311,6 @@ function TxRow({ tx, index }) {
     </motion.div>
   );
 }
-
-// ─── Earning Row ─────────────────────────────────────────────────────────────
 
 function EarningRow({ earning, index }) {
   const [hovered, setHovered] = useState(false);
@@ -338,40 +322,31 @@ function EarningRow({ earning, index }) {
       transition={{ delay: index * 0.04 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-        borderRadius: 14, cursor: 'default',
-        background: hovered ? 'rgba(255,255,255,0.04)' : 'transparent',
-        transition: 'background 0.15s',
-      }}
+      className={`flex items-center gap-3.5 px-4 py-3.5 rounded-2xl cursor-default transition-colors duration-150 ${
+        hovered ? 'bg-white/[0.04]' : 'bg-transparent'
+      }`}
     >
-      <div style={{
-        width: 42, height: 42, borderRadius: 14, flexShrink: 0,
-        background: 'rgba(34,197,94,0.1)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
+      <div className="w-[42px] h-[42px] rounded-2xl flex-shrink-0 flex items-center justify-center bg-accent/10">
         <TrendingUp size={18} color="#22C55E" />
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 3 }}>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-white mb-[3px]">
           {earning.description || earning.car_name || 'Trip earnings'}
         </div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', display: 'flex', gap: 8 }}>
+        <div className="text-xs text-white/40 flex gap-2">
           <span>{fmtDate(earning.completed_at || earning.created_at || earning.date)}</span>
           {earning.booking_id && (
-            <span style={{ color: 'rgba(255,255,255,0.25)' }}>
+            <span className="text-white/25">
               #{String(earning.booking_id).slice(0, 8).toUpperCase()}
             </span>
           )}
           {earning.renter_name && (
-            <span style={{ color: 'rgba(255,255,255,0.3)' }}>
-              {earning.renter_name}
-            </span>
+            <span className="text-white/30">{earning.renter_name}</span>
           )}
         </div>
       </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: '#22C55E' }}>
+      <div className="text-right flex-shrink-0">
+        <div className="text-base font-extrabold text-accent">
           +{fmtMoney(earning.earned || earning.amount)}
         </div>
       </div>
@@ -379,41 +354,31 @@ function EarningRow({ earning, index }) {
   );
 }
 
-// ─── Stat Card ───────────────────────────────────────────────────────────────
-
 function StatCard({ icon, label, value, color, bg, border }) {
   return (
-    <div style={{
-      padding: '16px 18px', borderRadius: 18,
-      background: bg, border: `1px solid ${border}`,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+    <div
+      className="px-[18px] py-4 rounded-[18px]"
+      style={{ background: bg, border: `1px solid ${border}` }}
+    >
+      <div className="flex items-center gap-1.5 mb-2">
         {icon}
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</span>
+        <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">{label}</span>
       </div>
-      <div style={{ fontSize: 20, fontWeight: 800, color }}>{value}</div>
+      <div className="text-xl font-extrabold" style={{ color }}>{value}</div>
     </div>
   );
 }
-
-// ─── Empty List ───────────────────────────────────────────────────────────────
 
 function EmptyList({ icon, text }) {
   return (
-    <div style={{ textAlign: 'center', padding: '60px 24px' }}>
-      <div style={{
-        width: 60, height: 60, borderRadius: 18,
-        background: 'rgba(255,255,255,0.04)', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
-      }}>
+    <div className="text-center px-6 py-[60px]">
+      <div className="w-[60px] h-[60px] rounded-[18px] bg-white/[0.04] flex items-center justify-center mx-auto mb-3">
         {icon}
       </div>
-      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14 }}>{text}</p>
+      <p className="text-white/35 text-sm">{text}</p>
     </div>
   );
 }
-
-// ─── FadeIn helper ───────────────────────────────────────────────────────────
 
 function FadeIn({ children, delay = 0 }) {
   const ref = useRef(null);
@@ -429,33 +394,3 @@ function FadeIn({ children, delay = 0 }) {
     </motion.div>
   );
 }
-
-// ─── Shared styles ───────────────────────────────────────────────────────────
-
-const backBtn = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 40, height: 40, borderRadius: 12, marginBottom: 20,
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-  color: 'white', cursor: 'pointer',
-};
-
-const errorBox = {
-  background: 'rgba(239,68,68,0.1)', color: '#EF4444',
-  padding: '12px 16px', borderRadius: 14, fontSize: 13,
-  fontWeight: 500, marginBottom: 16, border: '1px solid rgba(239,68,68,0.2)',
-  display: 'flex', alignItems: 'center', gap: 8,
-};
-
-const successBox = {
-  background: 'rgba(34,197,94,0.1)', color: '#22C55E',
-  padding: '12px 16px', borderRadius: 14, fontSize: 13,
-  fontWeight: 500, border: '1px solid rgba(34,197,94,0.2)',
-  display: 'flex', alignItems: 'center', gap: 8,
-};
-
-const spinnerStyle = {
-  width: 36, height: 36, borderRadius: '50%',
-  border: '3px solid rgba(255,255,255,0.08)',
-  borderTopColor: '#22C55E',
-  animation: 'spin 0.8s linear infinite',
-};
