@@ -45,7 +45,15 @@ struct CachedJwks {
 static JWKS_CACHE: RwLock<Option<CachedJwks>> = RwLock::new(None);
 
 async fn fetch_jwks() -> Result<Vec<AppleJwk>, String> {
-    let resp = reqwest::get(APPLE_JWKS_URL)
+    log::info!("Fetching Apple JWKS from {APPLE_JWKS_URL}");
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let resp = client
+        .get(APPLE_JWKS_URL)
+        .send()
         .await
         .map_err(|e| format!("Failed to fetch Apple JWKS: {e}"))?;
 
@@ -58,6 +66,7 @@ async fn fetch_jwks() -> Result<Vec<AppleJwk>, String> {
         .await
         .map_err(|e| format!("Failed to parse Apple JWKS: {e}"))?;
 
+    log::info!("Apple JWKS fetched: {} keys", jwks.keys.len());
     Ok(jwks.keys)
 }
 
