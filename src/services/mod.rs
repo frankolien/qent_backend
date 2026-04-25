@@ -1,4 +1,5 @@
 pub mod email;
+pub mod apple_auth;
 
 use serde::Deserialize;
 
@@ -11,6 +12,7 @@ pub struct AppConfig {
     pub app_url: String,
     pub host: String,
     pub port: u16,
+    pub apple_bundle_id: String,
 }
 
 impl AppConfig {
@@ -32,6 +34,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
+            apple_bundle_id: std::env::var("APPLE_BUNDLE_ID")
+                .unwrap_or_default(),
         }
     }
 }

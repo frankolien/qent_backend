@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, ArrowLeft, Search } from 'lucide-react';
+import { Heart, ArrowLeft, Search, Star, MapPin } from 'lucide-react';
 import { getFavorites, toggleFavorite } from '../utils/api';
 import { useAuth } from '../hooks/useAuth';
-import { Link } from 'react-router-dom';
-import { Star, MapPin } from 'lucide-react';
 
 export default function Favorites() {
   const { user } = useAuth();
@@ -39,29 +37,26 @@ export default function Favorites() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      style={{ maxWidth: 1200, margin: '0 auto', padding: '100px 24px 80px' }}
+      className="max-w-[1200px] mx-auto pt-[100px] px-6 pb-20"
     >
-      {/* Header */}
-      <button onClick={() => navigate(-1)} style={backBtn}>
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center justify-center w-10 h-10 rounded-xl mb-5 bg-white/[0.06] border border-white/[0.08] text-white cursor-pointer"
+      >
         <ArrowLeft size={18} />
       </button>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 12 }}>
+      <div className="flex justify-between items-end mb-8 flex-wrap gap-3">
         <div>
-          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: -1, marginBottom: 6 }}>Favorites</h1>
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+          <h1 className="text-[32px] font-black tracking-tighter mb-1.5">Favorites</h1>
+          <p className="text-white/40 text-sm">
             {favorites.length} saved car{favorites.length !== 1 ? 's' : ''}
           </p>
         </div>
         {favorites.length > 0 && (
           <button
             onClick={() => navigate('/search')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '10px 20px', borderRadius: 100,
-              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-              color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-            }}
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-white text-[13px] font-semibold cursor-pointer"
           >
             <Search size={14} /> Discover more
           </button>
@@ -69,22 +64,20 @@ export default function Favorites() {
       </div>
 
       {error && (
-        <div style={errorBox}>{error}</div>
+        <div className="bg-red-500/10 text-red-500 px-4 py-3 rounded-2xl text-[13px] font-medium mb-5 border border-red-500/20">
+          {error}
+        </div>
       )}
 
       {loading ? (
-        <div style={centerStyle}>
-          <div style={spinnerStyle} />
-          <p style={{ color: 'rgba(255,255,255,0.4)', marginTop: 16 }}>Loading favorites…</p>
+        <div className="flex flex-col items-center justify-center px-6 py-20">
+          <div className="spinner" />
+          <p className="text-white/40 mt-4">Loading favorites…</p>
         </div>
       ) : favorites.length === 0 ? (
         <EmptyState navigate={navigate} />
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: 20,
-        }}>
+        <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           <AnimatePresence>
             {favorites.map((item, i) => {
               const car = item.car || item;
@@ -105,8 +98,6 @@ export default function Favorites() {
   );
 }
 
-// ─── Favorite Car Card ───────────────────────────────────────────────────────
-
 function FavCard({ car, index, removing, onRemove }) {
   const [hovered, setHovered] = useState(false);
   const photo = car.photos?.[0] || '';
@@ -123,71 +114,62 @@ function FavCard({ car, index, removing, onRemove }) {
       transition={{ duration: 0.35, delay: index * 0.04 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        borderRadius: 20, overflow: 'hidden',
-        background: 'rgba(255,255,255,0.04)',
-        border: `1px solid ${hovered ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)'}`,
-        transition: 'border-color 0.3s, transform 0.3s',
-        transform: hovered ? 'translateY(-4px)' : 'none',
-      }}
+      className={`rounded-[20px] overflow-hidden bg-white/[0.04] border transition-all duration-300 ${
+        hovered ? 'border-accent/20 -translate-y-1' : 'border-white/[0.06]'
+      }`}
     >
       {/* Image */}
-      <div style={{ position: 'relative', height: 190, background: '#151515', overflow: 'hidden' }}>
+      <div className="relative h-[190px] bg-[#151515] overflow-hidden">
         {photo ? (
           <img
-            src={photo} alt={name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s', transform: hovered ? 'scale(1.06)' : 'scale(1)' }}
+            src={photo}
+            alt={name}
+            className={`w-full h-full object-cover transition-transform duration-500 ${
+              hovered ? 'scale-[1.06]' : 'scale-100'
+            }`}
           />
         ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, color: '#333' }}>🚗</div>
+          <div className="w-full h-full flex items-center justify-center text-5xl text-[#333]">🚗</div>
         )}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(transparent, rgba(0,0,0,0.6))' }} />
+        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-b from-transparent to-black/60" />
 
-        {/* Remove heart button */}
         <button
           onClick={onRemove}
           disabled={removing}
-          style={{
-            position: 'absolute', top: 12, right: 12,
-            width: 36, height: 36, borderRadius: 12,
-            background: removing ? 'rgba(0,0,0,0.6)' : 'rgba(239,68,68,0.15)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(239,68,68,0.3)',
-            cursor: removing ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s',
-          }}
+          className={`absolute top-3 right-3 w-9 h-9 rounded-xl backdrop-blur-md border border-red-500/30 flex items-center justify-center transition-all duration-200 ${
+            removing ? 'bg-black/60 cursor-not-allowed' : 'bg-red-500/15 cursor-pointer'
+          }`}
         >
-          <Heart size={16} fill={removing ? 'rgba(255,255,255,0.3)' : '#FF385C'} color={removing ? 'rgba(255,255,255,0.3)' : '#FF385C'} />
+          <Heart
+            size={16}
+            fill={removing ? 'rgba(255,255,255,0.3)' : '#FF385C'}
+            color={removing ? 'rgba(255,255,255,0.3)' : '#FF385C'}
+          />
         </button>
       </div>
 
       {/* Info */}
-      <Link to={`/cars/${car.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-        <div style={{ padding: '14px 16px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: 'white', flex: 1, paddingRight: 8 }}>{name}</h3>
+      <Link to={`/cars/${car.id}`} className="no-underline text-inherit">
+        <div className="px-4 pt-3.5 pb-4">
+          <div className="flex justify-between items-start mb-1.5">
+            <h3 className="text-[15px] font-bold m-0 text-white flex-1 pr-2">{name}</h3>
             {rating && Number(rating) > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <div className="flex items-center gap-[3px]">
                 <Star size={12} fill="#FFC107" color="#FFC107" />
-                <span style={{ fontSize: 12, fontWeight: 700 }}>{rating}</span>
+                <span className="text-xs font-bold">{rating}</span>
               </div>
             )}
           </div>
           {car.location && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'rgba(255,255,255,0.4)', fontSize: 12, marginBottom: 12 }}>
+            <div className="flex items-center gap-1 text-white/40 text-xs mb-3">
               <MapPin size={11} /> {car.location}
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--accent)' }}>
-              ₦{price}<span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.4)' }}>/day</span>
+          <div className="flex justify-between items-center">
+            <span className="text-[17px] font-extrabold text-accent">
+              ₦{price}<span className="text-[11px] font-medium text-white/40">/day</span>
             </span>
-            <span style={{
-              padding: '5px 12px', borderRadius: 8,
-              background: 'rgba(34,197,94,0.08)', color: 'var(--accent)',
-              fontSize: 11, fontWeight: 700, border: '1px solid rgba(34,197,94,0.15)',
-            }}>
+            <span className="px-3 py-[5px] rounded-lg bg-accent/[0.08] text-accent text-[11px] font-bold border border-accent/15">
               View car →
             </span>
           </div>
@@ -197,64 +179,27 @@ function FavCard({ car, index, removing, onRemove }) {
   );
 }
 
-// ─── Empty state ─────────────────────────────────────────────────────────────
-
 function EmptyState({ navigate }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4 }}
-      style={{ textAlign: 'center', padding: '80px 24px' }}
+      className="text-center px-6 py-20"
     >
-      <div style={{
-        width: 80, height: 80, borderRadius: 24,
-        background: 'rgba(255,56,92,0.08)', border: '1px solid rgba(255,56,92,0.15)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 24px',
-      }}>
+      <div className="w-20 h-20 rounded-3xl bg-[#FF385C]/[0.08] border border-[#FF385C]/15 flex items-center justify-center mx-auto mb-6">
         <Heart size={36} color="#FF385C" />
       </div>
-      <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 10 }}>No favorites yet</h3>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, lineHeight: 1.6, maxWidth: 320, margin: '0 auto 32px' }}>
+      <h3 className="text-[22px] font-extrabold mb-2.5">No favorites yet</h3>
+      <p className="text-white/40 text-sm leading-relaxed max-w-[320px] mx-auto mb-8">
         Tap the heart on any car to save it here for quick access later.
       </p>
       <button
         onClick={() => navigate('/search')}
-        style={{
-          padding: '14px 32px', background: 'var(--accent)', color: '#0A0A0A',
-          border: 'none', borderRadius: 100, fontSize: 15, fontWeight: 700,
-          cursor: 'pointer', fontFamily: 'inherit',
-        }}
+        className="px-8 py-3.5 bg-accent text-black border-0 rounded-full text-[15px] font-bold cursor-pointer"
       >
         Browse cars
       </button>
     </motion.div>
   );
 }
-
-// ─── Shared styles ───────────────────────────────────────────────────────────
-
-const backBtn = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 40, height: 40, borderRadius: 12, marginBottom: 20,
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-  color: 'white', cursor: 'pointer',
-};
-
-const errorBox = {
-  background: 'rgba(239,68,68,0.1)', color: '#EF4444',
-  padding: '12px 16px', borderRadius: 14, fontSize: 13,
-  fontWeight: 500, marginBottom: 20, border: '1px solid rgba(239,68,68,0.2)',
-};
-
-const centerStyle = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px',
-};
-
-const spinnerStyle = {
-  width: 36, height: 36, borderRadius: '50%',
-  border: '3px solid rgba(255,255,255,0.08)',
-  borderTopColor: '#22C55E',
-  animation: 'spin 0.8s linear infinite',
-};

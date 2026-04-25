@@ -91,47 +91,52 @@ export default function Trips() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      style={{ maxWidth: 900, margin: '0 auto', padding: '100px 24px 80px' }}
+      className="max-w-[900px] mx-auto pt-[100px] px-6 pb-20"
     >
-      {/* Header */}
-      <button onClick={() => navigate(-1)} style={backBtn}>
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center justify-center w-10 h-10 rounded-xl mb-5 bg-white/[0.06] border border-white/[0.08] text-white cursor-pointer"
+      >
         <ArrowLeft size={18} />
       </button>
 
-      <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: -1, marginBottom: 6 }}>My Trips</h1>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 32 }}>
+      <h1 className="text-[32px] font-black tracking-tighter mb-1.5">My Trips</h1>
+      <p className="text-white/40 text-sm mb-8">
         {bookings.length} booking{bookings.length !== 1 ? 's' : ''} total
       </p>
 
       {error && (
-        <div style={errorBox}>{error}</div>
+        <div className="bg-red-500/10 text-red-500 px-4 py-3 rounded-2xl text-[13px] font-medium mb-5 border border-red-500/20">
+          {error}
+        </div>
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 32, flexWrap: 'wrap' }}>
+      <div className="flex gap-2 mb-8 flex-wrap">
         {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '10px 20px', borderRadius: 100, fontSize: 13, fontWeight: 600,
-            background: tab === t ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
-            color: tab === t ? '#0A0A0A' : 'rgba(255,255,255,0.6)',
-            border: tab === t ? 'none' : '1px solid rgba(255,255,255,0.08)',
-            cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
-          }}>
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-5 py-2.5 rounded-full text-[13px] font-semibold cursor-pointer transition-all duration-200 ${
+              tab === t
+                ? 'bg-accent text-black border-0'
+                : 'bg-white/[0.06] text-white/60 border border-white/[0.08]'
+            }`}
+          >
             {t}
           </button>
         ))}
       </div>
 
-      {/* Content */}
       {loading ? (
-        <div style={centerStyle}>
-          <div style={spinner} />
-          <p style={{ color: 'rgba(255,255,255,0.4)', marginTop: 16 }}>Loading trips…</p>
+        <div className="flex flex-col items-center justify-center px-6 py-20">
+          <div className="spinner" />
+          <p className="text-white/40 mt-4">Loading trips…</p>
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState tab={tab} navigate={navigate} />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-4">
           <AnimatePresence>
             {filtered.map(b => (
               <TripCard
@@ -152,8 +157,6 @@ export default function Trips() {
   );
 }
 
-// ─── Trip Card ───────────────────────────────────────────────────────────────
-
 function TripCard({ booking, expanded, onToggle, onAction, onPay, acting, navigate }) {
   const meta = STATUS_META[booking.status] || { label: booking.status, color: '#6B7280', bg: 'rgba(107,114,128,0.12)', icon: Clock };
   const Icon = meta.icon;
@@ -169,46 +172,40 @@ function TripCard({ booking, expanded, onToggle, onAction, onPay, acting, naviga
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.35 }}
-      style={{
-        borderRadius: 20, overflow: 'hidden',
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-      }}
+      className="rounded-[20px] overflow-hidden bg-white/[0.04] border border-white/[0.08]"
     >
       {/* Main row */}
       <div
         onClick={onToggle}
-        style={{ display: 'flex', gap: 16, padding: 20, cursor: 'pointer', alignItems: 'flex-start' }}
+        className="flex gap-4 p-5 cursor-pointer items-start"
       >
         {/* Car photo */}
-        <div style={{ width: 88, height: 66, borderRadius: 14, overflow: 'hidden', background: '#151515', flexShrink: 0 }}>
+        <div className="w-[88px] h-[66px] rounded-2xl overflow-hidden bg-[#151515] flex-shrink-0">
           {photo
-            ? <img src={photo} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#333' }}>🚗</div>
+            ? <img src={photo} alt={name} className="w-full h-full object-cover" />
+            : <div className="w-full h-full flex items-center justify-center text-[28px] text-[#333]">🚗</div>
           }
         </div>
 
         {/* Info */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</h3>
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-start gap-3">
+            <h3 className="text-base font-bold m-0 whitespace-nowrap overflow-hidden text-ellipsis">{name}</h3>
             <StatusBadge meta={meta} Icon={Icon} />
           </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 8, color: 'rgba(255,255,255,0.5)', fontSize: 13, flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="flex gap-4 mt-2 text-white/50 text-[13px] flex-wrap">
+            <span className="flex items-center gap-1">
               <Calendar size={13} /> {fmtDate(booking.start_date)} – {fmtDate(booking.end_date)}
             </span>
-            <span style={{ color: '#22C55E', fontWeight: 700 }}>{fmtMoney(booking.total_amount)}</span>
+            <span className="text-accent font-bold">{fmtMoney(booking.total_amount)}</span>
           </div>
         </div>
 
-        {/* Expand toggle */}
-        <div style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0, marginTop: 2 }}>
+        <div className="text-white/30 flex-shrink-0 mt-0.5">
           {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </div>
       </div>
 
-      {/* Expanded section */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -216,11 +213,13 @@ function TripCard({ booking, expanded, onToggle, onAction, onPay, acting, naviga
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.3 }}
-            style={{ overflow: 'hidden' }}
+            className="overflow-hidden"
           >
-            <div style={{ padding: '0 20px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
-              {/* Details grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
+            <div className="px-5 pb-5 pt-4 border-t border-white/[0.06]">
+              <div
+                className="grid gap-3 mb-4"
+                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}
+              >
                 <DetailItem label="Booking ID" value={`#${booking.id?.toString().slice(0, 8).toUpperCase()}`} />
                 <DetailItem label="Days" value={booking.total_days || '—'} />
                 <DetailItem label="Price/day" value={fmtMoney(booking.price_per_day)} />
@@ -229,8 +228,7 @@ function TripCard({ booking, expanded, onToggle, onAction, onPay, acting, naviga
                 {booking.notes && <DetailItem label="Notes" value={booking.notes} />}
               </div>
 
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+              <div className="flex gap-2.5 flex-wrap mt-2">
                 {canPay && (
                   <ActionBtn
                     icon={<CheckCircle size={15} />}
@@ -274,16 +272,12 @@ function TripCard({ booking, expanded, onToggle, onAction, onPay, acting, naviga
   );
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
 function StatusBadge({ meta, Icon }) {
   return (
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      padding: '5px 10px', borderRadius: 100,
-      background: meta.bg, color: meta.color,
-      fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
-    }}>
+    <div
+      className="inline-flex items-center gap-1.5 px-2.5 py-[5px] rounded-full text-[11px] font-bold whitespace-nowrap flex-shrink-0"
+      style={{ background: meta.bg, color: meta.color }}
+    >
       <Icon size={11} />
       {meta.label}
     </div>
@@ -292,32 +286,28 @@ function StatusBadge({ meta, Icon }) {
 
 function DetailItem({ label, value, accent }) {
   return (
-    <div style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.04)' }}>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: accent ? '#22C55E' : 'white' }}>{value}</div>
+    <div className="px-3.5 py-3 rounded-xl bg-white/[0.04]">
+      <div className="text-[11px] text-white/40 font-semibold mb-1 uppercase tracking-wider">{label}</div>
+      <div className={`text-sm font-bold ${accent ? 'text-accent' : 'text-white'}`}>{value}</div>
     </div>
   );
 }
 
 function ActionBtn({ icon, label, onClick, variant, disabled }) {
-  const styles = {
-    primary:{ bg: '#22C55E',                color: '#0A0A0A', border: 'none' },
-    ghost:  { bg: 'rgba(255,255,255,0.06)', color: 'white',   border: '1px solid rgba(255,255,255,0.1)' },
-    danger: { bg: 'rgba(239,68,68,0.1)',    color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)'  },
-    accent: { bg: 'rgba(34,197,94,0.1)',    color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)'  },
+  const variants = {
+    primary: 'bg-accent text-black border-0',
+    ghost: 'bg-white/[0.06] text-white border border-white/10',
+    danger: 'bg-red-500/10 text-red-500 border border-red-500/20',
+    accent: 'bg-accent/10 text-accent border border-accent/20',
   };
-  const s = styles[variant] || styles.ghost;
+  const cls = variants[variant] || variants.ghost;
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '9px 16px', borderRadius: 12,
-        background: s.bg, color: s.color, border: s.border,
-        fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
-        fontFamily: 'inherit', opacity: disabled ? 0.5 : 1, transition: 'opacity 0.2s',
-      }}
+      className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-opacity ${cls} ${
+        disabled ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer'
+      }`}
     >
       {icon}{label}
     </button>
@@ -326,48 +316,22 @@ function ActionBtn({ icon, label, onClick, variant, disabled }) {
 
 function EmptyState({ tab, navigate }) {
   return (
-    <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-      <div style={{ width: 72, height: 72, borderRadius: 24, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+    <div className="text-center px-6 py-20">
+      <div className="w-[72px] h-[72px] rounded-3xl bg-white/[0.04] flex items-center justify-center mx-auto mb-5">
         <Car size={32} color="rgba(255,255,255,0.15)" />
       </div>
-      <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+      <h3 className="text-xl font-bold mb-2">
         {tab === 'All' ? 'No trips yet' : `No ${tab.toLowerCase()} trips`}
       </h3>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 28 }}>
+      <p className="text-white/40 text-sm mb-7">
         {tab === 'All' ? 'Your booked cars will show up here.' : `You have no ${tab.toLowerCase()} bookings.`}
       </p>
       <button
         onClick={() => navigate('/search')}
-        style={{ padding: '12px 28px', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: 100, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+        className="px-7 py-3 bg-accent text-black border-0 rounded-full text-sm font-bold cursor-pointer"
       >
         Find a car
       </button>
     </div>
   );
 }
-
-// ─── Shared styles ───────────────────────────────────────────────────────────
-
-const backBtn = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 40, height: 40, borderRadius: 12, marginBottom: 20,
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-  color: 'white', cursor: 'pointer',
-};
-
-const errorBox = {
-  background: 'rgba(239,68,68,0.1)', color: '#EF4444',
-  padding: '12px 16px', borderRadius: 14, fontSize: 13,
-  fontWeight: 500, marginBottom: 20, border: '1px solid rgba(239,68,68,0.2)',
-};
-
-const centerStyle = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px',
-};
-
-const spinner = {
-  width: 36, height: 36, borderRadius: '50%',
-  border: '3px solid rgba(255,255,255,0.08)',
-  borderTopColor: '#22C55E',
-  animation: 'spin 0.8s linear infinite',
-};

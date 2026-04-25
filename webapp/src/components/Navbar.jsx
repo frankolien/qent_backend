@@ -45,114 +45,82 @@ export default function Navbar() {
 
   return (
     <>
-      <style>{`
-        @media (max-width: 768px) {
-          .nav-center-links { display: none !important; }
-          .nav-right-desktop { display: none !important; }
-          .nav-hamburger { display: flex !important; }
-        }
-        @media (min-width: 769px) {
-          .nav-hamburger { display: none !important; }
-        }
-      `}</style>
-
       <motion.nav
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5 }}
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-          padding: '16px 0',
-          background: (scrolled || menuOpen) ? 'rgba(10,10,10,0.95)' : 'transparent',
-          backdropFilter: (scrolled || menuOpen) ? 'blur(24px)' : 'none',
-          WebkitBackdropFilter: (scrolled || menuOpen) ? 'blur(24px)' : 'none',
-          borderBottom: (scrolled || menuOpen) ? '1px solid rgba(255,255,255,0.06)' : 'none',
-          transition: 'all 0.3s ease',
-        }}
+        className={`fixed top-0 left-0 right-0 z-[100] py-4 transition-all duration-300 ${
+          scrolled || menuOpen
+            ? 'bg-black/95 backdrop-blur-nav border-b border-white/[0.06]'
+            : 'bg-transparent border-b-0'
+        }`}
       >
-        <div style={{
-          maxWidth: 1280, margin: '0 auto',
-          padding: '0 24px',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          {/* Logo */}
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+        <div className="max-w-[1280px] mx-auto px-6 flex justify-between items-center">
+          <Link to="/" className="flex items-center gap-2.5 no-underline">
             <Logo variant="full" size={36} />
           </Link>
 
           {/* Center nav links — desktop only */}
-          <div className="nav-center-links" style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+          <div className="hidden md:flex items-center gap-8">
             <NavLink href="#cars" active={isHome} onClick={() => handleNavLinkClick('#cars')}>Browse</NavLink>
             <NavLink href="#how-it-works" onClick={() => handleNavLinkClick('#how-it-works')}>How it works</NavLink>
             {user ? (
-              <Link to="/dashboard" style={navLinkStyle}>Partnership</Link>
+              <Link to="/dashboard" className="text-sm font-medium text-white/50 cursor-pointer no-underline transition-colors hover:text-white">
+                Partnership
+              </Link>
             ) : (
               <NavLink href="#host" onClick={() => handleNavLinkClick('#host')}>Become a host</NavLink>
             )}
           </div>
 
           {/* Right — desktop only */}
-          <div className="nav-right-desktop" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="hidden md:flex items-center gap-3">
             {user ? (
               <>
-                <Link to="/trips" style={pillStyle}>My trips</Link>
+                <Link to="/trips" className="px-[18px] py-2 text-[13px] font-semibold text-white bg-white/[0.08] border border-white/10 rounded-full no-underline">
+                  My trips
+                </Link>
                 <div
                   onClick={() => navigate('/profile')}
-                  style={{
-                    width: 38, height: 38, borderRadius: 12,
-                    background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', overflow: 'hidden',
-                  }}
+                  className="w-[38px] h-[38px] rounded-xl bg-white/10 border border-white/10 flex items-center justify-center cursor-pointer overflow-hidden"
                 >
                   {user.profile_photo_url ? (
-                    <img src={user.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={user.profile_photo_url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>{user.full_name?.[0]}</span>
+                    <span className="text-sm font-bold">{user.full_name?.[0]}</span>
                   )}
                 </div>
               </>
             ) : (
               <>
-                <Link to="/login" style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.7)', padding: '8px 16px', textDecoration: 'none' }}>Log in</Link>
-                <Link to="/signup" style={{
-                  padding: '10px 24px', fontSize: 14, fontWeight: 600,
-                  background: 'var(--accent)', color: 'var(--black)',
-                  borderRadius: 100, transition: 'transform 0.2s', textDecoration: 'none',
-                }}>Get Started</Link>
+                <Link to="/login" className="text-sm font-medium text-white/70 px-4 py-2 no-underline">Log in</Link>
+                <Link to="/signup" className="px-6 py-2.5 text-sm font-semibold bg-accent text-black rounded-full transition-transform hover:scale-105 no-underline">
+                  Get Started
+                </Link>
               </>
             )}
           </div>
 
           {/* Hamburger — mobile only */}
           <button
-            className="nav-hamburger"
             onClick={() => setMenuOpen(prev => !prev)}
             aria-label="Toggle menu"
-            style={{
-              display: 'flex',
-              flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-              gap: 5, width: 40, height: 40,
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 10, cursor: 'pointer', padding: 0,
-              flexShrink: 0,
-            }}
+            className="md:hidden flex flex-col justify-center items-center gap-[5px] w-10 h-10 bg-white/[0.08] border border-white/10 rounded-[10px] cursor-pointer p-0 flex-shrink-0"
           >
             <motion.span
               animate={menuOpen ? { rotate: 45, y: 7 } : { rotate: 0, y: 0 }}
               transition={{ duration: 0.25 }}
-              style={{ display: 'block', width: 18, height: 1.5, background: 'white', borderRadius: 2, transformOrigin: 'center' }}
+              className="block w-[18px] h-[1.5px] bg-white rounded-[2px] origin-center"
             />
             <motion.span
               animate={menuOpen ? { opacity: 0, scaleX: 0 } : { opacity: 1, scaleX: 1 }}
               transition={{ duration: 0.2 }}
-              style={{ display: 'block', width: 18, height: 1.5, background: 'white', borderRadius: 2 }}
+              className="block w-[18px] h-[1.5px] bg-white rounded-[2px]"
             />
             <motion.span
               animate={menuOpen ? { rotate: -45, y: -7 } : { rotate: 0, y: 0 }}
               transition={{ duration: 0.25 }}
-              style={{ display: 'block', width: 18, height: 1.5, background: 'white', borderRadius: 2, transformOrigin: 'center' }}
+              className="block w-[18px] h-[1.5px] bg-white rounded-[2px] origin-center"
             />
           </button>
         </div>
@@ -167,19 +135,11 @@ export default function Navbar() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            style={{
-              position: 'fixed', top: 70, left: 0, right: 0, bottom: 0,
-              zIndex: 99,
-              background: 'rgba(10,10,10,0.98)',
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
-              display: 'flex', flexDirection: 'column',
-              padding: '16px 24px 40px',
-              overflowY: 'auto',
-            }}
+            className="fixed top-[70px] left-0 right-0 bottom-0 z-[99] flex flex-col overflow-y-auto px-6 pb-10 pt-4"
+            style={{ background: 'rgba(10,10,10,0.98)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
           >
             {/* Nav links */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 32 }}>
+            <div className="flex flex-col gap-0.5 mb-8">
               <MobileNavLink onClick={() => handleNavLinkClick('#cars')}>Browse</MobileNavLink>
               <MobileNavLink onClick={() => handleNavLinkClick('#how-it-works')}>How it works</MobileNavLink>
               {user ? (
@@ -193,70 +153,47 @@ export default function Navbar() {
             </div>
 
             {/* Divider */}
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 32 }} />
+            <div className="h-px bg-white/[0.07] mb-8" />
 
             {/* Auth section */}
             {user ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="flex flex-col gap-3">
                 <div
                   onClick={() => { setMenuOpen(false); navigate('/profile'); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '12px 0', cursor: 'pointer',
-                  }}
+                  className="flex items-center gap-3.5 py-3 cursor-pointer"
                 >
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 12,
-                    background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    overflow: 'hidden', flexShrink: 0,
-                  }}>
+                  <div className="w-11 h-11 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                     {user.profile_photo_url ? (
-                      <img src={user.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={user.profile_photo_url} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{user.full_name?.[0]}</span>
+                      <span className="text-base font-bold text-white">{user.full_name?.[0]}</span>
                     )}
                   </div>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: 'white' }}>{user.full_name}</div>
-                    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>View profile</div>
+                    <div className="text-[15px] font-semibold text-white">{user.full_name}</div>
+                    <div className="text-[13px] text-white/40 mt-0.5">View profile</div>
                   </div>
                 </div>
                 <button
                   onClick={() => { logout(); setMenuOpen(false); }}
-                  style={{
-                    marginTop: 8, padding: '14px', fontSize: 14, fontWeight: 600,
-                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 12, color: 'rgba(255,255,255,0.6)', cursor: 'pointer',
-                    width: '100%',
-                  }}
+                  className="mt-2 py-3.5 text-sm font-semibold bg-white/[0.06] border border-white/[0.08] rounded-xl text-white/60 cursor-pointer w-full"
                 >
                   Log out
                 </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="flex flex-col gap-3">
                 <Link
                   to="/signup"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    display: 'block', textAlign: 'center',
-                    padding: '15px 24px', fontSize: 15, fontWeight: 600,
-                    background: 'var(--accent)', color: 'var(--black)',
-                    borderRadius: 14, textDecoration: 'none',
-                  }}
+                  className="block text-center py-[15px] px-6 text-[15px] font-semibold bg-accent text-black rounded-2xl no-underline"
                 >
                   Get Started
                 </Link>
                 <Link
                   to="/login"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    display: 'block', textAlign: 'center',
-                    padding: '15px 24px', fontSize: 15, fontWeight: 600,
-                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 14, color: 'rgba(255,255,255,0.7)', textDecoration: 'none',
-                  }}
+                  className="block text-center py-[15px] px-6 text-[15px] font-semibold bg-white/[0.06] border border-white/[0.08] rounded-2xl text-white/70 no-underline"
                 >
                   Log in
                 </Link>
@@ -287,11 +224,15 @@ function NavLink({ href, active, onClick, children }) {
   };
 
   return (
-    <a href={href} onClick={handleClick} style={{
-      fontSize: 14, fontWeight: 500,
-      color: active ? 'white' : 'rgba(255,255,255,0.5)',
-      transition: 'color 0.2s', cursor: 'pointer', textDecoration: 'none',
-    }}>{children}</a>
+    <a
+      href={href}
+      onClick={handleClick}
+      className={`text-sm font-medium cursor-pointer transition-colors hover:text-white ${
+        active ? 'text-white' : 'text-white/50'
+      }`}
+    >
+      {children}
+    </a>
   );
 }
 
@@ -299,27 +240,9 @@ function MobileNavLink({ onClick, children }) {
   return (
     <button
       onClick={onClick}
-      style={{
-        display: 'block', textAlign: 'left', width: '100%',
-        padding: '16px 4px', fontSize: 22, fontWeight: 600,
-        color: 'rgba(255,255,255,0.85)', background: 'none', border: 'none',
-        cursor: 'pointer', letterSpacing: '-0.3px',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
-      }}
+      className="block text-left w-full py-4 px-1 text-[22px] font-semibold text-white/85 bg-transparent border-0 border-b border-white/[0.05] cursor-pointer tracking-tight"
     >
       {children}
     </button>
   );
 }
-
-const pillStyle = {
-  padding: '8px 18px', fontSize: 13, fontWeight: 600,
-  background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 100, color: 'white', textDecoration: 'none',
-};
-
-const navLinkStyle = {
-  fontSize: 14, fontWeight: 500,
-  color: 'rgba(255,255,255,0.5)',
-  transition: 'color 0.2s', cursor: 'pointer', textDecoration: 'none',
-};

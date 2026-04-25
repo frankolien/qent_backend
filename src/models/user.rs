@@ -25,7 +25,7 @@ pub struct User {
     pub id: Uuid,
     pub email: String,
     pub phone: Option<String>,
-    pub password_hash: String,
+    pub password_hash: Option<String>,
     pub full_name: String,
     pub role: UserRole,
     pub profile_photo_url: Option<String>,
@@ -35,6 +35,7 @@ pub struct User {
     pub wallet_balance: f64,
     pub is_active: bool,
     pub country: String,
+    pub apple_id: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -139,4 +140,11 @@ pub struct ForgotPasswordRequest {
 pub struct ResetPasswordRequest {
     pub token: String,
     pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AppleSignInRequest {
+    pub identity_token: String,
+    pub full_name: Option<String>,
+    pub email: Option<String>,
 }
