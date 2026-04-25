@@ -388,7 +388,7 @@ enum Shape {
 }
 ```
 
-## 1.11 String Types: &str vs String
+## 1.11 String Types:: &str vs String
 
 This trips up every new Rust developer. There are two main string types:
 
