@@ -45,8 +45,9 @@ pub async fn get_stories(_req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
 
     match result {
         Ok(stories) => HttpResponse::Ok().json(stories),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -58,7 +59,9 @@ pub async fn create_story(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let user_id = claims.sub;
@@ -112,8 +115,9 @@ pub async fn create_story(
 
     match result {
         Ok(story) => HttpResponse::Created().json(story),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -125,7 +129,9 @@ pub async fn delete_story(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let story_id = path.into_inner();
@@ -142,7 +148,8 @@ pub async fn delete_story(
             HttpResponse::Ok().json(serde_json::json!({"message": "Story deleted"}))
         }
         Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "Story not found"})),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }

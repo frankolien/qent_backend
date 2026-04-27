@@ -36,21 +36,19 @@ pub async fn get_host_stats(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRe
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
         None => {
-            return HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Unauthorized"}))
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
         }
     };
 
     let host_id = claims.sub;
 
     // Fetch all stats in parallel queries
-    let total_listings = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM cars WHERE host_id = $1",
-    )
-    .bind(host_id)
-    .fetch_one(pool.get_ref())
-    .await
-    .unwrap_or(0);
+    let total_listings =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cars WHERE host_id = $1")
+            .bind(host_id)
+            .fetch_one(pool.get_ref())
+            .await
+            .unwrap_or(0);
 
     let active_listings = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM cars WHERE host_id = $1 AND status = 'active'",
@@ -138,8 +136,7 @@ pub async fn get_host_listings(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
         None => {
-            return HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Unauthorized"}))
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
         }
     };
 
@@ -170,8 +167,9 @@ pub async fn get_host_listings(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
 
     match result {
         Ok(listings) => HttpResponse::Ok().json(listings),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 

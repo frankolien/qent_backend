@@ -11,7 +11,9 @@ pub async fn toggle_favorite(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let car_id = path.into_inner();
@@ -49,7 +51,9 @@ pub async fn toggle_favorite(
 pub async fn get_favorites(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let result = sqlx::query_as::<_, Car>(
@@ -77,7 +81,9 @@ pub async fn get_favorites(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
 
     match result {
         Ok(cars) => HttpResponse::Ok().json(cars),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -88,7 +94,9 @@ pub async fn check_favorite(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let car_id = path.into_inner();

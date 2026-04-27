@@ -12,7 +12,9 @@ pub async fn create_report(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Verify the booking exists and user is involved
@@ -25,7 +27,9 @@ pub async fn create_report(
 
     let (renter_id, host_id, status) = match booking {
         Ok(Some(b)) => b,
-        _ => return HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"})),
+        _ => {
+            return HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"}))
+        }
     };
 
     if claims.sub != renter_id && claims.sub != host_id {
@@ -33,11 +37,16 @@ pub async fn create_report(
     }
 
     if status != "active" && status != "completed" {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({"error": "Can only submit reports for active or completed trips"}));
+        return HttpResponse::BadRequest().json(
+            serde_json::json!({"error": "Can only submit reports for active or completed trips"}),
+        );
     }
 
-    let role = if claims.sub == host_id { "host" } else { "renter" };
+    let role = if claims.sub == host_id {
+        "host"
+    } else {
+        "renter"
+    };
 
     // Check if already submitted
     let existing = sqlx::query_scalar::<_, bool>(
@@ -75,7 +84,9 @@ pub async fn create_report(
 
     match result {
         Ok(report) => HttpResponse::Created().json(report),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -87,7 +98,9 @@ pub async fn get_reports(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let booking_id = path.into_inner();
@@ -115,6 +128,8 @@ pub async fn get_reports(
 
     match reports {
         Ok(r) => HttpResponse::Ok().json(r),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
