@@ -1,5 +1,5 @@
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use actix_multipart::Multipart;
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use futures_util::StreamExt as _;
 use std::io::Write;
 use uuid::Uuid;
@@ -17,7 +17,9 @@ pub async fn upload_file(
     // Auth check
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let mut file_url = String::new();
@@ -36,7 +38,9 @@ pub async fn upload_file(
             .to_lowercase();
 
         // Validate allowed extensions
-        let allowed = ["jpg", "jpeg", "png", "gif", "webp", "mp3", "m4a", "aac", "ogg", "wav", "opus"];
+        let allowed = [
+            "jpg", "jpeg", "png", "gif", "webp", "mp3", "m4a", "aac", "ogg", "wav", "opus",
+        ];
         if !allowed.contains(&ext.as_str()) {
             return HttpResponse::BadRequest()
                 .json(serde_json::json!({"error": "File type not allowed"}));
@@ -75,7 +79,10 @@ pub async fn upload_file(
 
         // Build URL — in prod use APP_URL, locally use relative path
         let base_url = &config.app_url;
-        file_url = if base_url.is_empty() || base_url.contains("localhost") || base_url.contains("127.0.0.1") {
+        file_url = if base_url.is_empty()
+            || base_url.contains("localhost")
+            || base_url.contains("127.0.0.1")
+        {
             format!("/uploads/{}", filename)
         } else {
             format!("{}/uploads/{}", base_url, filename)
@@ -85,8 +92,7 @@ pub async fn upload_file(
     }
 
     if file_url.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({"error": "No file provided"}));
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": "No file provided"}));
     }
 
     HttpResponse::Ok().json(serde_json::json!({"url": file_url}))

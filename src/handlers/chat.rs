@@ -62,7 +62,9 @@ pub async fn get_or_create_conversation(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let caller_id = claims.sub;
@@ -84,8 +86,7 @@ pub async fn get_or_create_conversation(
     let car_host_id = match car_host {
         Ok(Some(id)) => id,
         Ok(None) => {
-            return HttpResponse::NotFound()
-                .json(serde_json::json!({"error": "Car not found"}));
+            return HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found"}));
         }
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -191,15 +192,18 @@ pub async fn get_or_create_conversation(
 
     match result {
         Ok(conversation) => HttpResponse::Created().json(conversation),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
 pub async fn get_conversations(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let user_id = claims.sub;
@@ -233,8 +237,9 @@ pub async fn get_conversations(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
 
     match result {
         Ok(conversations) => HttpResponse::Ok().json(conversations),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -245,7 +250,9 @@ pub async fn get_messages(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let conversation_id = path.into_inner();
@@ -303,8 +310,9 @@ pub async fn get_messages(
 
     match result {
         Ok(messages) => HttpResponse::Ok().json(messages),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -316,7 +324,9 @@ pub async fn send_message(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let conversation_id = path.into_inner();
@@ -390,8 +400,9 @@ pub async fn send_message(
 
     match result {
         Ok(message) => HttpResponse::Created().json(message),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -403,7 +414,9 @@ pub async fn delete_conversation(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let conversation_id = path.into_inner();
@@ -437,8 +450,9 @@ pub async fn delete_conversation(
 
     match result {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"message": "Conversation deleted"})),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -449,8 +463,9 @@ pub async fn mark_read(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
-        
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let conversation_id = path.into_inner();

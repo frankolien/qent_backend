@@ -5,7 +5,10 @@ use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::models::{Car, CarSearchQuery, CarStatus, Claims, CreateCarRequest, HomepageQuery, UpdateCarRequest, UserRole};
+use crate::models::{
+    Car, CarSearchQuery, CarStatus, Claims, CreateCarRequest, HomepageQuery, UpdateCarRequest,
+    UserRole,
+};
 
 pub async fn create_car(
     req: HttpRequest,
@@ -14,11 +17,14 @@ pub async fn create_car(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     if claims.role != UserRole::Host && claims.role != UserRole::Admin {
-        return HttpResponse::Forbidden().json(serde_json::json!({"error": "Only hosts can list cars"}));
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Only hosts can list cars"}));
     }
 
     if let Err(e) = body.validate() {
@@ -66,7 +72,9 @@ pub async fn create_car(
 
     match result {
         Ok(car) => HttpResponse::Created().json(car),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -90,14 +98,16 @@ pub async fn get_car(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResp
         LEFT JOIN users u ON u.id = c.host_id
         WHERE c.id = $1"#,
     )
-        .bind(car_id)
-        .fetch_optional(pool.get_ref())
-        .await;
+    .bind(car_id)
+    .fetch_optional(pool.get_ref())
+    .await;
 
     match result {
         Ok(Some(car)) => HttpResponse::Ok().json(car),
         Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -127,7 +137,10 @@ pub async fn search_cars(
     };
 
     // If sorting by distance, add a distance column
-    let distance_select = if query.sort_by.as_deref() == Some("distance") && query.latitude.is_some() && query.longitude.is_some() {
+    let distance_select = if query.sort_by.as_deref() == Some("distance")
+        && query.latitude.is_some()
+        && query.longitude.is_some()
+    {
         format!(
             ", (6371 * acos(cos(radians({})) * cos(radians(c.latitude)) * cos(radians(c.longitude) - radians({})) + sin(radians({})) * sin(radians(c.latitude)))) as distance_km",
             query.latitude.unwrap(), query.longitude.unwrap(), query.latitude.unwrap()
@@ -184,14 +197,18 @@ pub async fn search_cars(
 
     match result {
         Ok(cars) => HttpResponse::Ok().json(cars),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
 pub async fn get_host_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let result = sqlx::query_as::<_, Car>(
@@ -218,7 +235,9 @@ pub async fn get_host_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
 
     match result {
         Ok(cars) => HttpResponse::Ok().json(cars),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -230,7 +249,9 @@ pub async fn update_car(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let car_id = path.into_inner();
@@ -249,7 +270,8 @@ pub async fn update_car(
             return HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found"}));
         }
         Err(e) => {
-            return HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}));
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}));
         }
         _ => {}
     }
@@ -300,7 +322,9 @@ pub async fn update_car(
 
     match result {
         Ok(car) => HttpResponse::Ok().json(car),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -311,7 +335,9 @@ pub async fn deactivate_car(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let car_id = path.into_inner();
@@ -329,8 +355,11 @@ pub async fn deactivate_car(
         Ok(r) if r.rows_affected() > 0 => {
             HttpResponse::Ok().json(serde_json::json!({"message": "Car deactivated"}))
         }
-        Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found or not authorized"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(_) => HttpResponse::NotFound()
+            .json(serde_json::json!({"error": "Car not found or not authorized"})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -340,10 +369,7 @@ struct BookedDateRange {
     end_date: NaiveDate,
 }
 
-pub async fn get_booked_dates(
-    pool: web::Data<PgPool>,
-    path: web::Path<Uuid>,
-) -> HttpResponse {
+pub async fn get_booked_dates(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let car_id = path.into_inner();
 
     let result = sqlx::query_as::<_, BookedDateRange>(
@@ -357,7 +383,9 @@ pub async fn get_booked_dates(
 
     match result {
         Ok(ranges) => HttpResponse::Ok().json(ranges),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -413,11 +441,7 @@ pub async fn get_homepage(
         .iter()
         .filter(|c| c.trip_count.unwrap_or(0) > 0)
         .collect();
-    popular_cars.sort_by(|a, b| {
-        b.trip_count
-            .unwrap_or(0)
-            .cmp(&a.trip_count.unwrap_or(0))
-    });
+    popular_cars.sort_by(|a, b| b.trip_count.unwrap_or(0).cmp(&a.trip_count.unwrap_or(0)));
     let popular_cars: Vec<&Car> = popular_cars.into_iter().take(10).collect();
 
     // --- Nearby: sorted by distance from user's coordinates ---

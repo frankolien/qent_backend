@@ -1,27 +1,34 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::Utc;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use sqlx::PgPool;
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::models::{
-    AppleSignInRequest, AuthResponse, AuthResponseWithRefresh, Claims, ForgotPasswordRequest,
-    RefreshTokenRequest, ResetPasswordRequest, SignInRequest, SignUpRequest, UpdateProfileRequest,
-    User, UserPublic, VerificationStatus, VerifyIdentityRequest,
+    AppleSignInRequest, AuthResponseWithRefresh, Claims, ForgotPasswordRequest,
+    GoogleSignInRequest, RefreshTokenRequest, ResetPasswordRequest, SignInRequest, SignUpRequest,
+    UpdateProfileRequest, User, UserPublic, VerificationStatus, VerifyIdentityRequest,
 };
 use crate::services::apple_auth::verify_identity_token;
 use crate::services::email::EmailService;
+use crate::services::google_auth::verify_identity_token as verify_google_identity_token;
 use crate::services::AppConfig;
 
 fn generate_refresh_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    (0..64).map(|_| {
-        let idx = rng.gen_range(0..36);
-        if idx < 10 { (b'0' + idx) as char } else { (b'a' + idx - 10) as char }
-    }).collect()
+    (0..64)
+        .map(|_| {
+            let idx = rng.gen_range(0..36);
+            if idx < 10 {
+                (b'0' + idx) as char
+            } else {
+                (b'a' + idx - 10) as char
+            }
+        })
+        .collect()
 }
 
 pub async fn sign_up(
@@ -33,26 +40,32 @@ pub async fn sign_up(
         return HttpResponse::BadRequest().json(serde_json::json!({"errors": e.to_string()}));
     }
 
-    let existing = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)"
-    )
-    .bind(&body.email)
-    .fetch_one(pool.get_ref())
-    .await;
+    let existing =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(&body.email)
+            .fetch_one(pool.get_ref())
+            .await;
 
     if let Ok(true) = existing {
-        return HttpResponse::Conflict().json(serde_json::json!({"error": "Email already registered"}));
+        return HttpResponse::Conflict()
+            .json(serde_json::json!({"error": "Email already registered"}));
     }
 
     let password_hash = match hash(&body.password, DEFAULT_COST) {
         Ok(h) => h,
-        Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": "Failed to hash password"})),
+        Err(_) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": "Failed to hash password"}))
+        }
     };
 
     let id = Uuid::new_v4();
     let now = Utc::now().naive_utc();
 
-    let country = body.country.clone().unwrap_or_else(|| "Nigeria".to_string());
+    let country = body
+        .country
+        .clone()
+        .unwrap_or_else(|| "Nigeria".to_string());
 
     let result = sqlx::query(
         r#"INSERT INTO users (id, email, phone, password_hash, full_name, role, verification_status, wallet_balance, is_active, country, created_at, updated_at)
@@ -71,7 +84,8 @@ pub async fn sign_up(
     .await;
 
     if let Err(_e) = result {
-        return HttpResponse::InternalServerError().json(serde_json::json!({"error": "Registration failed"}));
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": "Registration failed"}));
     }
 
     let claims = Claims {
@@ -108,7 +122,10 @@ pub async fn sign_up(
             verification_status: VerificationStatus::Pending,
             wallet_balance: 0.0,
             is_active: true,
-            country: body.country.clone().unwrap_or_else(|| "Nigeria".to_string()),
+            country: body
+                .country
+                .clone()
+                .unwrap_or_else(|| "Nigeria".to_string()),
             created_at: now,
         },
     })
@@ -194,7 +211,10 @@ pub async fn refresh_token(
 
     let user = match user {
         Ok(Some(u)) => u,
-        _ => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Invalid refresh token"})),
+        _ => {
+            return HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Invalid refresh token"}))
+        }
     };
 
     let claims = Claims {
@@ -232,7 +252,8 @@ pub async fn forgot_password(
     body: web::Json<ForgotPasswordRequest>,
 ) -> HttpResponse {
     // Always return success to prevent email enumeration
-    let success_msg = serde_json::json!({"message": "If that email is registered, a reset link has been sent."});
+    let success_msg =
+        serde_json::json!({"message": "If that email is registered, a reset link has been sent."});
 
     let user = sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true",
@@ -251,10 +272,12 @@ pub async fn forgot_password(
     let expires = Utc::now() + chrono::Duration::minutes(30);
 
     // Invalidate old tokens
-    let _ = sqlx::query("UPDATE password_reset_tokens SET used = true WHERE user_id = $1 AND used = false")
-        .bind(user.id)
-        .execute(pool.get_ref())
-        .await;
+    let _ = sqlx::query(
+        "UPDATE password_reset_tokens SET used = true WHERE user_id = $1 AND used = false",
+    )
+    .bind(user.id)
+    .execute(pool.get_ref())
+    .await;
 
     // Store token
     let _ = sqlx::query(
@@ -273,7 +296,13 @@ pub async fn forgot_password(
         &token[..8] // Use first 8 chars as user-facing code
     );
     email_service
-        .send_status_email(&user.email, &user.full_name, "Qent", "Password Reset", &reset_message)
+        .send_status_email(
+            &user.email,
+            &user.full_name,
+            "Qent",
+            "Password Reset",
+            &reset_message,
+        )
         .await;
 
     HttpResponse::Ok().json(&success_msg)
@@ -302,12 +331,18 @@ pub async fn reset_password(
 
     let (token_id, user_id) = match token_record {
         Ok(Some(r)) => r,
-        _ => return HttpResponse::BadRequest().json(serde_json::json!({"error": "Invalid or expired reset code"})),
+        _ => {
+            return HttpResponse::BadRequest()
+                .json(serde_json::json!({"error": "Invalid or expired reset code"}))
+        }
     };
 
     let password_hash = match hash(&body.new_password, DEFAULT_COST) {
         Ok(h) => h,
-        Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": "Failed to hash password"})),
+        Err(_) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": "Failed to hash password"}))
+        }
     };
 
     // Update password
@@ -330,20 +365,22 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRespo
     let claims = req.extensions().get::<Claims>().cloned();
     let claims = match claims {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
-    let user = sqlx::query_as::<_, crate::models::User>(
-        "SELECT * FROM users WHERE id = $1",
-    )
-    .bind(claims.sub)
-    .fetch_optional(pool.get_ref())
-    .await;
+    let user = sqlx::query_as::<_, crate::models::User>("SELECT * FROM users WHERE id = $1")
+        .bind(claims.sub)
+        .fetch_optional(pool.get_ref())
+        .await;
 
     match user {
         Ok(Some(u)) => HttpResponse::Ok().json(UserPublic::from(u)),
         Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "User not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -367,7 +404,9 @@ pub async fn get_user_public(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> 
             HttpResponse::Ok().json(public)
         }
         Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "User not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -379,7 +418,9 @@ pub async fn update_profile(
     let claims = req.extensions().get::<Claims>().cloned();
     let claims = match claims {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     if let Err(e) = body.validate() {
@@ -403,7 +444,9 @@ pub async fn update_profile(
 
     match result {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"message": "Profile updated"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -415,7 +458,9 @@ pub async fn verify_identity(
     let claims = req.extensions().get::<Claims>().cloned();
     let claims = match claims {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let result = sqlx::query(
@@ -434,8 +479,11 @@ pub async fn verify_identity(
     .await;
 
     match result {
-        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"message": "Identity documents submitted for verification"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(_) => HttpResponse::Ok()
+            .json(serde_json::json!({"message": "Identity documents submitted for verification"})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -465,12 +513,11 @@ pub async fn sign_in_with_apple(
     let apple_email = claims.email.or_else(|| body.email.clone());
 
     // 1) Match by apple_id first (the stable identifier)
-    let existing = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE apple_id = $1 AND is_active = true",
-    )
-    .bind(&apple_sub)
-    .fetch_optional(pool.get_ref())
-    .await;
+    let existing =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE apple_id = $1 AND is_active = true")
+            .bind(&apple_sub)
+            .fetch_optional(pool.get_ref())
+            .await;
 
     let user = match existing {
         Ok(Some(u)) => u,
@@ -491,14 +538,16 @@ pub async fn sign_in_with_apple(
             };
 
             if let Some(u) = by_email {
-                let _ = sqlx::query(
-                    "UPDATE users SET apple_id = $1, updated_at = NOW() WHERE id = $2",
-                )
-                .bind(&apple_sub)
-                .bind(u.id)
-                .execute(pool.get_ref())
-                .await;
-                User { apple_id: Some(apple_sub.clone()), ..u }
+                let _ =
+                    sqlx::query("UPDATE users SET apple_id = $1, updated_at = NOW() WHERE id = $2")
+                        .bind(&apple_sub)
+                        .bind(u.id)
+                        .execute(pool.get_ref())
+                        .await;
+                User {
+                    apple_id: Some(apple_sub.clone()),
+                    ..u
+                }
             } else {
                 // Create a new user. Email may be absent on relay-only first sign-ins;
                 // fall back to a synthetic address so our UNIQUE email constraint holds.
@@ -556,6 +605,157 @@ pub async fn sign_in_with_apple(
     };
 
     // Issue our JWT + rotate refresh token (same shape as /signin)
+    let jwt_claims = Claims {
+        sub: user.id,
+        role: user.role.clone(),
+        exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
+    };
+
+    let token = encode(
+        &Header::default(),
+        &jwt_claims,
+        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
+    )
+    .unwrap();
+
+    let refresh = generate_refresh_token();
+    let _ = sqlx::query("UPDATE users SET refresh_token = $1 WHERE id = $2")
+        .bind(&refresh)
+        .bind(user.id)
+        .execute(pool.get_ref())
+        .await;
+
+    HttpResponse::Ok().json(AuthResponseWithRefresh {
+        token,
+        refresh_token: refresh,
+        user: user.into(),
+    })
+}
+
+/// POST /api/auth/signin/google
+///
+/// Accepts a Google OpenID Connect `idToken`, verifies it against Google's JWKS,
+/// and signs the user into Qent. Existing users are matched by `google_id` first,
+/// then linked by verified email, otherwise a new renter account is created.
+pub async fn sign_in_with_google(
+    pool: web::Data<PgPool>,
+    config: web::Data<AppConfig>,
+    body: web::Json<GoogleSignInRequest>,
+) -> HttpResponse {
+    let claims = match verify_google_identity_token(&body.id_token, &config.google_client_ids).await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("Google idToken verification failed: {e}");
+            return HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Invalid Google identity token"}));
+        }
+    };
+
+    let google_sub = claims.sub;
+    let google_email = claims.email.or_else(|| body.email.clone());
+    let email_verified = claims.email_verified.unwrap_or(false);
+
+    let existing =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE google_id = $1 AND is_active = true")
+            .bind(&google_sub)
+            .fetch_optional(pool.get_ref())
+            .await;
+
+    let user = match existing {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            let by_email = if email_verified {
+                if let Some(ref email) = google_email {
+                    sqlx::query_as::<_, User>(
+                        "SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true",
+                    )
+                    .bind(email)
+                    .fetch_optional(pool.get_ref())
+                    .await
+                    .ok()
+                    .flatten()
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some(u) = by_email {
+                let _ = sqlx::query(
+                    "UPDATE users SET google_id = $1, updated_at = NOW() WHERE id = $2",
+                )
+                .bind(&google_sub)
+                .bind(u.id)
+                .execute(pool.get_ref())
+                .await;
+                User {
+                    google_id: Some(google_sub.clone()),
+                    ..u
+                }
+            } else {
+                let email = google_email
+                    .clone()
+                    .unwrap_or_else(|| format!("{}@google.qent.local", google_sub));
+                let full_name = body
+                    .full_name
+                    .clone()
+                    .or(claims.name)
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| "Google User".to_string());
+                let id = Uuid::new_v4();
+                let now = Utc::now().naive_utc();
+
+                let insert = sqlx::query(
+                    r#"INSERT INTO users (id, email, password_hash, full_name, role, verification_status, wallet_balance, is_active, country, google_id, created_at, updated_at)
+                       VALUES ($1, $2, NULL, $3, $4, $5, 0.0, true, $6, $7, $8, $8)"#,
+                )
+                .bind(id)
+                .bind(&email)
+                .bind(&full_name)
+                .bind(crate::models::UserRole::Renter)
+                .bind(VerificationStatus::Pending)
+                .bind("Nigeria")
+                .bind(&google_sub)
+                .bind(now)
+                .execute(pool.get_ref())
+                .await;
+
+                if let Err(e) = insert {
+                    log::error!("Failed to create Google user: {e}");
+                    if e.to_string().contains("users_email_key")
+                        || e.to_string().contains("duplicate key")
+                    {
+                        return HttpResponse::Conflict().json(serde_json::json!({
+                            "error": "Email already registered. Sign in with your existing method first, then link Google."
+                        }));
+                    }
+                    return HttpResponse::InternalServerError()
+                        .json(serde_json::json!({"error": "Failed to create account"}));
+                }
+
+                match sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(pool.get_ref())
+                    .await
+                {
+                    Ok(u) => u,
+                    Err(e) => {
+                        log::error!("Failed to load newly created Google user: {e}");
+                        return HttpResponse::InternalServerError()
+                            .json(serde_json::json!({"error": "Failed to create account"}));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("DB error looking up Google user: {e}");
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": "Internal server error"}));
+        }
+    };
+
     let jwt_claims = Claims {
         sub: user.id,
         role: user.role.clone(),

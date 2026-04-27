@@ -72,10 +72,7 @@ impl Handler<Connect> for WsManager {
 
     fn handle(&mut self, msg: Connect, _: &mut Context<Self>) {
         log::info!("WS: User {} connected", msg.user_id);
-        self.sessions
-            .entry(msg.user_id)
-            .or_default()
-            .push(msg.addr);
+        self.sessions.entry(msg.user_id).or_default().push(msg.addr);
     }
 }
 
@@ -192,9 +189,15 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
 
                     match msg_type.as_str() {
                         "chat_message" => {
-                            let conversation_id = incoming["conversation_id"].as_str().unwrap_or("").to_string();
+                            let conversation_id = incoming["conversation_id"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string();
                             let content = incoming["content"].as_str().unwrap_or("").to_string();
-                            let message_type = incoming["message_type"].as_str().unwrap_or("text").to_string();
+                            let message_type = incoming["message_type"]
+                                .as_str()
+                                .unwrap_or("text")
+                                .to_string();
 
                             // Save to DB and broadcast
                             actix::spawn(async move {
@@ -231,7 +234,11 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
                                         .await;
 
                                         if let Ok(Some((renter_id, host_id))) = participants {
-                                            let recipient = if user_id == renter_id { host_id } else { renter_id };
+                                            let recipient = if user_id == renter_id {
+                                                host_id
+                                            } else {
+                                                renter_id
+                                            };
 
                                             let payload = serde_json::json!({
                                                 "id": msg_id.to_string(),
@@ -265,7 +272,10 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
                             });
                         }
                         "typing" => {
-                            let conversation_id = incoming["conversation_id"].as_str().unwrap_or("").to_string();
+                            let conversation_id = incoming["conversation_id"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string();
                             let is_typing = incoming["is_typing"].as_bool().unwrap_or(false);
 
                             actix::spawn(async move {
@@ -278,7 +288,11 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
                                     .await;
 
                                     if let Ok(Some((renter_id, host_id))) = participants {
-                                        let recipient = if user_id == renter_id { host_id } else { renter_id };
+                                        let recipient = if user_id == renter_id {
+                                            host_id
+                                        } else {
+                                            renter_id
+                                        };
                                         manager.do_send(SendToUser {
                                             user_id: recipient,
                                             message: WsMessage {
@@ -294,8 +308,10 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
                                 }
                             });
                         }
-                        "call_offer" | "call_answer" | "ice_candidate" | "call_hangup" | "call_reject" => {
-                            let target_id = incoming["target_id"].as_str().unwrap_or("").to_string();
+                        "call_offer" | "call_answer" | "ice_candidate" | "call_hangup"
+                        | "call_reject" => {
+                            let target_id =
+                                incoming["target_id"].as_str().unwrap_or("").to_string();
 
                             actix::spawn(async move {
                                 if let Ok(target) = Uuid::parse_str(&target_id) {
@@ -356,7 +372,9 @@ pub async fn ws_connect(
     let claims = match token_data {
         Ok(data) => data.claims,
         Err(_) => {
-            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({"error": "Invalid token"})));
+            return Ok(
+                HttpResponse::Unauthorized().json(serde_json::json!({"error": "Invalid token"}))
+            );
         }
     };
 

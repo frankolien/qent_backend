@@ -36,6 +36,7 @@ pub struct User {
     pub is_active: bool,
     pub country: String,
     pub apple_id: Option<String>,
+    pub google_id: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -145,6 +146,13 @@ pub struct ResetPasswordRequest {
 #[derive(Debug, Deserialize)]
 pub struct AppleSignInRequest {
     pub identity_token: String,
+    pub full_name: Option<String>,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GoogleSignInRequest {
+    pub id_token: String,
     pub full_name: Option<String>,
     pub email: Option<String>,
 }

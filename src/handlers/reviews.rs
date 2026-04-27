@@ -12,7 +12,9 @@ pub async fn create_review(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     if let Err(e) = body.validate() {
@@ -68,14 +70,13 @@ pub async fn create_review(
 
     match result {
         Ok(review) => HttpResponse::Created().json(review),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
-pub async fn get_user_reviews(
-    pool: web::Data<PgPool>,
-    path: web::Path<Uuid>,
-) -> HttpResponse {
+pub async fn get_user_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let user_id = path.into_inner();
 
     let reviews = sqlx::query_as::<_, Review>(
@@ -87,14 +88,13 @@ pub async fn get_user_reviews(
 
     match reviews {
         Ok(r) => HttpResponse::Ok().json(r),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
-pub async fn get_user_rating(
-    pool: web::Data<PgPool>,
-    path: web::Path<Uuid>,
-) -> HttpResponse {
+pub async fn get_user_rating(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let user_id = path.into_inner();
 
     let avg = sqlx::query_scalar::<_, Option<f64>>(
@@ -104,12 +104,10 @@ pub async fn get_user_rating(
     .fetch_one(pool.get_ref())
     .await;
 
-    let count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM reviews WHERE reviewee_id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(pool.get_ref())
-    .await;
+    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM reviews WHERE reviewee_id = $1")
+        .bind(user_id)
+        .fetch_one(pool.get_ref())
+        .await;
 
     HttpResponse::Ok().json(UserRatingSummary {
         user_id,

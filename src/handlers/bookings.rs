@@ -16,7 +16,9 @@ pub async fn create_booking(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Fetch car
@@ -37,17 +39,24 @@ pub async fn create_booking(
         ) rs ON rs.car_id = c.id
         WHERE c.id = $1 AND c.status = 'active'"#,
     )
-        .bind(body.car_id)
-        .fetch_optional(pool.get_ref())
-        .await
+    .bind(body.car_id)
+    .fetch_optional(pool.get_ref())
+    .await
     {
         Ok(Some(c)) => c,
-        Ok(None) => return HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found or not available"})),
-        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(None) => {
+            return HttpResponse::NotFound()
+                .json(serde_json::json!({"error": "Car not found or not available"}))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
     };
 
     if car.host_id == claims.sub {
-        return HttpResponse::BadRequest().json(serde_json::json!({"error": "Cannot book your own car"}));
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "Cannot book your own car"}));
     }
 
     // Check date overlap
@@ -66,12 +75,14 @@ pub async fn create_booking(
     .await;
 
     if let Ok(true) = overlap {
-        return HttpResponse::Conflict().json(serde_json::json!({"error": "Car is already booked for these dates"}));
+        return HttpResponse::Conflict()
+            .json(serde_json::json!({"error": "Car is already booked for these dates"}));
     }
 
     let total_days = (body.end_date - body.start_date).num_days() as i32;
     if total_days <= 0 {
-        return HttpResponse::BadRequest().json(serde_json::json!({"error": "End date must be after start date"}));
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "End date must be after start date"}));
     }
 
     let subtotal = car.price_per_day * total_days as f64;
@@ -125,13 +136,19 @@ pub async fn create_booking(
                 pool.get_ref(),
                 car.host_id,
                 "New Booking Request",
-                &format!("You have a new booking request for your {} {}", car.make, car.model),
+                &format!(
+                    "You have a new booking request for your {} {}",
+                    car.make, car.model
+                ),
                 "booking_request",
                 Some(serde_json::json!({"booking_id": booking.id.to_string()})),
-            ).await;
+            )
+            .await;
             HttpResponse::Created().json(booking)
         }
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -142,7 +159,9 @@ pub async fn get_booking(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let booking_id = path.into_inner();
@@ -158,15 +177,21 @@ pub async fn get_booking(
 
     match result {
         Ok(Some(b)) => HttpResponse::Ok().json(b),
-        Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(None) => {
+            HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"}))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
 pub async fn get_my_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let result = sqlx::query_as::<_, BookingWithCar>(
@@ -187,7 +212,9 @@ pub async fn get_my_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
 
     match result {
         Ok(bookings) => HttpResponse::Ok().json(bookings),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -200,7 +227,9 @@ pub async fn update_booking_status(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let booking_id = path.into_inner();
@@ -211,47 +240,64 @@ pub async fn update_booking_status(
         .await
     {
         Ok(Some(b)) => b,
-        Ok(None) => return HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"})),
-        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(None) => {
+            return HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"}))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
     };
 
     let new_status = match body.action {
         BookingAction::Approve => {
             if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden().json(serde_json::json!({"error": "Only the host can approve"}));
+                return HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only the host can approve"}));
             }
             if booking.status != BookingStatus::Pending {
-                return HttpResponse::BadRequest().json(serde_json::json!({"error": "Booking is not pending"}));
+                return HttpResponse::BadRequest()
+                    .json(serde_json::json!({"error": "Booking is not pending"}));
             }
             BookingStatus::Approved
         }
         BookingAction::Reject => {
             if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden().json(serde_json::json!({"error": "Only the host can reject"}));
+                return HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only the host can reject"}));
             }
             BookingStatus::Rejected
         }
         BookingAction::Cancel => {
-            if booking.renter_id != claims.sub && booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden().json(serde_json::json!({"error": "Not authorized to cancel"}));
+            if booking.renter_id != claims.sub
+                && booking.host_id != claims.sub
+                && claims.role != UserRole::Admin
+            {
+                return HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Not authorized to cancel"}));
             }
             BookingStatus::Cancelled
         }
         BookingAction::Activate => {
             if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden().json(serde_json::json!({"error": "Only the host can activate"}));
+                return HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only the host can activate"}));
             }
-            if booking.status != BookingStatus::Approved && booking.status != BookingStatus::Confirmed {
+            if booking.status != BookingStatus::Approved
+                && booking.status != BookingStatus::Confirmed
+            {
                 return HttpResponse::BadRequest().json(serde_json::json!({"error": "Booking must be approved or confirmed to activate"}));
             }
             BookingStatus::Active
         }
         BookingAction::Complete => {
             if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden().json(serde_json::json!({"error": "Only the host can complete"}));
+                return HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only the host can complete"}));
             }
             if booking.status != BookingStatus::Active {
-                return HttpResponse::BadRequest().json(serde_json::json!({"error": "Booking is not active"}));
+                return HttpResponse::BadRequest()
+                    .json(serde_json::json!({"error": "Booking is not active"}));
             }
             BookingStatus::Completed
         }
@@ -292,15 +338,14 @@ pub async fn update_booking_status(
     }
 
     // Fetch car name for notification
-    let car_name = sqlx::query_scalar::<_, String>(
-        "SELECT make || ' ' || model FROM cars WHERE id = $1",
-    )
-    .bind(booking.car_id)
-    .fetch_optional(pool.get_ref())
-    .await
-    .ok()
-    .flatten()
-    .unwrap_or_else(|| "your car".to_string());
+    let car_name =
+        sqlx::query_scalar::<_, String>("SELECT make || ' ' || model FROM cars WHERE id = $1")
+            .bind(booking.car_id)
+            .fetch_optional(pool.get_ref())
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "your car".to_string());
 
     match &result {
         Ok(b) => {
@@ -316,37 +361,56 @@ pub async fn update_booking_status(
                 }
                 BookingStatus::Rejected => {
                     let _ = create_notification(
-                        pool.get_ref(), booking.renter_id,
+                        pool.get_ref(),
+                        booking.renter_id,
                         "Booking Declined",
                         &format!("Your booking for {} was declined by the host.", car_name),
-                        "booking_rejected", data,
-                    ).await;
+                        "booking_rejected",
+                        data,
+                    )
+                    .await;
                 }
                 BookingStatus::Cancelled => {
                     // Notify the other party
-                    let notify_user = if claims.sub == booking.renter_id { booking.host_id } else { booking.renter_id };
+                    let notify_user = if claims.sub == booking.renter_id {
+                        booking.host_id
+                    } else {
+                        booking.renter_id
+                    };
                     let _ = create_notification(
-                        pool.get_ref(), notify_user,
+                        pool.get_ref(),
+                        notify_user,
                         "Booking Cancelled",
                         &format!("A booking for {} has been cancelled.", car_name),
-                        "booking_cancelled", data,
-                    ).await;
+                        "booking_cancelled",
+                        data,
+                    )
+                    .await;
                 }
                 BookingStatus::Active => {
                     let _ = create_notification(
-                        pool.get_ref(), booking.renter_id,
+                        pool.get_ref(),
+                        booking.renter_id,
                         "Trip Started",
-                        &format!("Your trip with {} is now active. Enjoy your ride!", car_name),
-                        "booking_active", data,
-                    ).await;
+                        &format!(
+                            "Your trip with {} is now active. Enjoy your ride!",
+                            car_name
+                        ),
+                        "booking_active",
+                        data,
+                    )
+                    .await;
                 }
                 BookingStatus::Completed => {
                     let _ = create_notification(
-                        pool.get_ref(), booking.renter_id,
+                        pool.get_ref(),
+                        booking.renter_id,
                         "Trip Completed",
                         &format!("Your trip with {} is complete. Leave a review!", car_name),
-                        "booking_completed", data,
-                    ).await;
+                        "booking_completed",
+                        data,
+                    )
+                    .await;
                 }
                 _ => {}
             }
@@ -356,23 +420,39 @@ pub async fn update_booking_status(
             let (notify_user_id, email_msg) = match new_status {
                 BookingStatus::Approved => (
                     booking.renter_id,
-                    format!("Your booking for {} has been approved! Coordinate pickup with the host.", car_name),
+                    format!(
+                        "Your booking for {} has been approved! Coordinate pickup with the host.",
+                        car_name
+                    ),
                 ),
                 BookingStatus::Rejected => (
                     booking.renter_id,
                     format!("Your booking for {} was declined by the host.", car_name),
                 ),
                 BookingStatus::Cancelled => {
-                    let other = if claims.sub == booking.renter_id { booking.host_id } else { booking.renter_id };
-                    (other, format!("A booking for {} has been cancelled.", car_name))
+                    let other = if claims.sub == booking.renter_id {
+                        booking.host_id
+                    } else {
+                        booking.renter_id
+                    };
+                    (
+                        other,
+                        format!("A booking for {} has been cancelled.", car_name),
+                    )
                 }
                 BookingStatus::Active => (
                     booking.renter_id,
-                    format!("Your trip with {} is now active. Enjoy your ride!", car_name),
+                    format!(
+                        "Your trip with {} is now active. Enjoy your ride!",
+                        car_name
+                    ),
                 ),
                 BookingStatus::Completed => (
                     booking.renter_id,
-                    format!("Your trip with {} is complete. We'd love your feedback!", car_name),
+                    format!(
+                        "Your trip with {} is complete. We'd love your feedback!",
+                        car_name
+                    ),
                 ),
                 _ => (booking.renter_id, String::new()),
             };
@@ -387,7 +467,9 @@ pub async fn update_booking_status(
 
                 if let Ok(Some((email, name))) = user_info {
                     let status_str = format!("{:?}", new_status).to_lowercase();
-                    email_service.send_status_email(&email, &name, &car_name, &status_str, &email_msg).await;
+                    email_service
+                        .send_status_email(&email, &name, &car_name, &status_str, &email_msg)
+                        .await;
                 }
             }
         }
@@ -396,7 +478,9 @@ pub async fn update_booking_status(
 
     match result {
         Ok(b) => HttpResponse::Ok().json(b),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -428,7 +512,9 @@ async fn create_notification(
 pub async fn get_host_pending_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let result = sqlx::query_as::<_, BookingWithCar>(
@@ -449,6 +535,8 @@ pub async fn get_host_pending_bookings(req: HttpRequest, pool: web::Data<PgPool>
 
     match result {
         Ok(bookings) => HttpResponse::Ok().json(bookings),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }

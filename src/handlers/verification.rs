@@ -46,14 +46,13 @@ pub async fn send_code(
         .await;
 
     // Insert new code
-    let result = sqlx::query(
-        "INSERT INTO verification_codes (email, code, expires_at) VALUES ($1, $2, $3)",
-    )
-    .bind(&email)
-    .bind(&code)
-    .bind(expires_at)
-    .execute(pool.get_ref())
-    .await;
+    let result =
+        sqlx::query("INSERT INTO verification_codes (email, code, expires_at) VALUES ($1, $2, $3)")
+            .bind(&email)
+            .bind(&code)
+            .bind(expires_at)
+            .execute(pool.get_ref())
+            .await;
 
     if result.is_err() {
         return HttpResponse::InternalServerError()
@@ -108,8 +107,7 @@ pub async fn verify_code(
     };
 
     if row.verified {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({"error": "Code already used"}));
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": "Code already used"}));
     }
 
     if Utc::now() > row.expires_at {
@@ -118,8 +116,9 @@ pub async fn verify_code(
             .bind(&email)
             .execute(pool.get_ref())
             .await;
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({"error": "Verification code expired. Please request a new one."}));
+        return HttpResponse::BadRequest().json(
+            serde_json::json!({"error": "Verification code expired. Please request a new one."}),
+        );
     }
 
     if row.code != body.code.trim() {
