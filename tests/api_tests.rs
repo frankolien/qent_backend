@@ -117,7 +117,10 @@ async fn test_protection_plans() {
 
 #[tokio::test]
 async fn test_signup_and_signin() {
-    let email = format!("testuser_{}@test.com", chrono::Utc::now().timestamp_millis());
+    let email = format!(
+        "testuser_{}@test.com",
+        chrono::Utc::now().timestamp_millis()
+    );
 
     // Sign up
     let resp = client()

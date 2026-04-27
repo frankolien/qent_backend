@@ -9,7 +9,9 @@ use crate::services::AppConfig;
 pub async fn list_cards(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let cards = sqlx::query_as::<_, SavedCard>(
@@ -37,7 +39,9 @@ pub async fn set_default_card(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let card_id = path.into_inner();
@@ -78,7 +82,9 @@ pub async fn delete_card(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let card_id = path.into_inner();
@@ -106,17 +112,18 @@ pub async fn charge_saved_card(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Get the card
-    let card = sqlx::query_as::<_, SavedCard>(
-        "SELECT * FROM saved_cards WHERE id = $1 AND user_id = $2",
-    )
-    .bind(body.card_id)
-    .bind(claims.sub)
-    .fetch_optional(pool.get_ref())
-    .await;
+    let card =
+        sqlx::query_as::<_, SavedCard>("SELECT * FROM saved_cards WHERE id = $1 AND user_id = $2")
+            .bind(body.card_id)
+            .bind(claims.sub)
+            .fetch_optional(pool.get_ref())
+            .await;
 
     let card = match card {
         Ok(Some(c)) => c,

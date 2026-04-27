@@ -102,7 +102,11 @@ impl EmailService {
 </html>"#,
             customer_name = customer_name,
             car_name = car_name,
-            booking_short = if booking_id.len() > 8 { &booking_id[..8] } else { booking_id },
+            booking_short = if booking_id.len() > 8 {
+                &booking_id[..8]
+            } else {
+                booking_id
+            },
             start_date = start_date.format("%d %b %Y"),
             end_date = end_date.format("%d %b %Y"),
             total_days = total_days,
@@ -110,9 +114,11 @@ impl EmailService {
             subtotal = format_naira(subtotal),
             service_fee = format_naira(service_fee),
             protection_row = if protection_fee > 0.0 {
-                format!(r#"<tr><td style="color:#666;padding:8px 0;border-top:1px solid #eee">Protection fee</td><td style="font-weight:600;text-align:right;padding:8px 0;border-top:1px solid #eee">{naira}{fee}</td></tr>"#,
+                format!(
+                    r#"<tr><td style="color:#666;padding:8px 0;border-top:1px solid #eee">Protection fee</td><td style="font-weight:600;text-align:right;padding:8px 0;border-top:1px solid #eee">{naira}{fee}</td></tr>"#,
                     naira = "\u{20A6}",
-                    fee = format_naira(protection_fee))
+                    fee = format_naira(protection_fee)
+                )
             } else {
                 String::new()
             },
@@ -162,12 +168,42 @@ impl EmailService {
         }
 
         let (subject, badge_bg, badge_color, badge_text) = match status {
-            "approved" => (format!("Booking Approved - {}", car_name), "#E3F2FD", "#1565C0", "Approved"),
-            "rejected" => (format!("Booking Declined - {}", car_name), "#FFEBEE", "#C62828", "Declined"),
-            "cancelled" => (format!("Booking Cancelled - {}", car_name), "#FFEBEE", "#C62828", "Cancelled"),
-            "active" => (format!("Trip Started - {}", car_name), "#E8F5E9", "#2E7D32", "In Progress"),
-            "completed" => (format!("Trip Completed - {}", car_name), "#F5F5F5", "#616161", "Completed"),
-            _ => (format!("Booking Update - {}", car_name), "#F5F5F5", "#616161", status),
+            "approved" => (
+                format!("Booking Approved - {}", car_name),
+                "#E3F2FD",
+                "#1565C0",
+                "Approved",
+            ),
+            "rejected" => (
+                format!("Booking Declined - {}", car_name),
+                "#FFEBEE",
+                "#C62828",
+                "Declined",
+            ),
+            "cancelled" => (
+                format!("Booking Cancelled - {}", car_name),
+                "#FFEBEE",
+                "#C62828",
+                "Cancelled",
+            ),
+            "active" => (
+                format!("Trip Started - {}", car_name),
+                "#E8F5E9",
+                "#2E7D32",
+                "In Progress",
+            ),
+            "completed" => (
+                format!("Trip Completed - {}", car_name),
+                "#F5F5F5",
+                "#616161",
+                "Completed",
+            ),
+            _ => (
+                format!("Booking Update - {}", car_name),
+                "#F5F5F5",
+                "#616161",
+                status,
+            ),
         };
 
         let html = format!(

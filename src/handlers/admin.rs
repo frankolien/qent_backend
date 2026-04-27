@@ -2,18 +2,20 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::{Booking, Car, CarStatus, Claims, Payment, User, UserRole, VerificationStatus, WalletTransaction};
+use crate::models::{
+    Booking, Car, CarStatus, Claims, Payment, User, UserRole, VerificationStatus, WalletTransaction,
+};
 use crate::services::AppConfig;
 
 fn require_admin(req: &HttpRequest) -> Result<Claims, HttpResponse> {
-    let claims = req
-        .extensions()
-        .get::<Claims>()
-        .cloned()
-        .ok_or_else(|| HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})))?;
+    let claims = req.extensions().get::<Claims>().cloned().ok_or_else(|| {
+        HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+    })?;
 
     if claims.role != UserRole::Admin {
-        return Err(HttpResponse::Forbidden().json(serde_json::json!({"error": "Admin access required"})));
+        return Err(
+            HttpResponse::Forbidden().json(serde_json::json!({"error": "Admin access required"}))
+        );
     }
     Ok(claims)
 }
@@ -29,10 +31,13 @@ pub async fn list_users(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRespon
 
     match result {
         Ok(users) => {
-            let public: Vec<crate::models::UserPublic> = users.into_iter().map(Into::into).collect();
+            let public: Vec<crate::models::UserPublic> =
+                users.into_iter().map(Into::into).collect();
             HttpResponse::Ok().json(public)
         }
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -58,12 +63,14 @@ pub async fn list_all_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
         LEFT JOIN users u ON u.id = c.host_id
         ORDER BY c.created_at DESC"#,
     )
-        .fetch_all(pool.get_ref())
-        .await;
+    .fetch_all(pool.get_ref())
+    .await;
 
     match result {
         Ok(cars) => HttpResponse::Ok().json(cars),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -89,8 +96,11 @@ pub async fn approve_car(
         Ok(r) if r.rows_affected() > 0 => {
             HttpResponse::Ok().json(serde_json::json!({"message": "Car approved"}))
         }
-        Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found or not pending"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(_) => HttpResponse::NotFound()
+            .json(serde_json::json!({"error": "Car not found or not pending"})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -104,20 +114,20 @@ pub async fn reject_car(
     }
 
     let car_id = path.into_inner();
-    let result = sqlx::query(
-        "UPDATE cars SET status = $1, updated_at = NOW() WHERE id = $2",
-    )
-    .bind(CarStatus::Rejected)
-    .bind(car_id)
-    .execute(pool.get_ref())
-    .await;
+    let result = sqlx::query("UPDATE cars SET status = $1, updated_at = NOW() WHERE id = $2")
+        .bind(CarStatus::Rejected)
+        .bind(car_id)
+        .execute(pool.get_ref())
+        .await;
 
     match result {
         Ok(r) if r.rows_affected() > 0 => {
             HttpResponse::Ok().json(serde_json::json!({"message": "Car rejected"}))
         }
         Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "Car not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -131,20 +141,21 @@ pub async fn verify_user(
     }
 
     let user_id = path.into_inner();
-    let result = sqlx::query(
-        "UPDATE users SET verification_status = $1, updated_at = NOW() WHERE id = $2",
-    )
-    .bind(VerificationStatus::Verified)
-    .bind(user_id)
-    .execute(pool.get_ref())
-    .await;
+    let result =
+        sqlx::query("UPDATE users SET verification_status = $1, updated_at = NOW() WHERE id = $2")
+            .bind(VerificationStatus::Verified)
+            .bind(user_id)
+            .execute(pool.get_ref())
+            .await;
 
     match result {
         Ok(r) if r.rows_affected() > 0 => {
             HttpResponse::Ok().json(serde_json::json!({"message": "User verified"}))
         }
         Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "User not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -158,20 +169,21 @@ pub async fn reject_user_verification(
     }
 
     let user_id = path.into_inner();
-    let result = sqlx::query(
-        "UPDATE users SET verification_status = $1, updated_at = NOW() WHERE id = $2",
-    )
-    .bind(VerificationStatus::Rejected)
-    .bind(user_id)
-    .execute(pool.get_ref())
-    .await;
+    let result =
+        sqlx::query("UPDATE users SET verification_status = $1, updated_at = NOW() WHERE id = $2")
+            .bind(VerificationStatus::Rejected)
+            .bind(user_id)
+            .execute(pool.get_ref())
+            .await;
 
     match result {
         Ok(r) if r.rows_affected() > 0 => {
             HttpResponse::Ok().json(serde_json::json!({"message": "Verification rejected"}))
         }
         Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "User not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -185,19 +197,20 @@ pub async fn deactivate_user(
     }
 
     let user_id = path.into_inner();
-    let result = sqlx::query(
-        "UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1",
-    )
-    .bind(user_id)
-    .execute(pool.get_ref())
-    .await;
+    let result =
+        sqlx::query("UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1")
+            .bind(user_id)
+            .execute(pool.get_ref())
+            .await;
 
     match result {
         Ok(r) if r.rows_affected() > 0 => {
             HttpResponse::Ok().json(serde_json::json!({"message": "User deactivated"}))
         }
         Ok(_) => HttpResponse::NotFound().json(serde_json::json!({"error": "User not found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -236,12 +249,11 @@ pub async fn get_analytics(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     .await
     .unwrap_or(0);
 
-    let pending_approvals = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM cars WHERE status = 'pendingapproval'",
-    )
-    .fetch_one(pool.get_ref())
-    .await
-    .unwrap_or(0);
+    let pending_approvals =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cars WHERE status = 'pendingapproval'")
+            .fetch_one(pool.get_ref())
+            .await
+            .unwrap_or(0);
 
     HttpResponse::Ok().json(serde_json::json!({
         "total_users": total_users,
@@ -258,15 +270,16 @@ pub async fn list_all_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
         return resp;
     }
 
-    let result = sqlx::query_as::<_, Booking>(
-        "SELECT * FROM bookings ORDER BY created_at DESC LIMIT 100",
-    )
-    .fetch_all(pool.get_ref())
-    .await;
+    let result =
+        sqlx::query_as::<_, Booking>("SELECT * FROM bookings ORDER BY created_at DESC LIMIT 100")
+            .fetch_all(pool.get_ref())
+            .await;
 
     match result {
         Ok(bookings) => HttpResponse::Ok().json(bookings),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -275,15 +288,16 @@ pub async fn list_all_payments(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
         return resp;
     }
 
-    let result = sqlx::query_as::<_, Payment>(
-        "SELECT * FROM payments ORDER BY created_at DESC LIMIT 100",
-    )
-    .fetch_all(pool.get_ref())
-    .await;
+    let result =
+        sqlx::query_as::<_, Payment>("SELECT * FROM payments ORDER BY created_at DESC LIMIT 100")
+            .fetch_all(pool.get_ref())
+            .await;
 
     match result {
         Ok(payments) => HttpResponse::Ok().json(payments),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -304,8 +318,13 @@ pub async fn handle_dispute_refund(
         .await
     {
         Ok(Some(b)) => b,
-        Ok(None) => return HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"})),
-        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(None) => {
+            return HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"}))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
     };
 
     // Full refund for admin disputes
@@ -349,7 +368,9 @@ pub async fn list_pending_withdrawals(req: HttpRequest, pool: web::Data<PgPool>)
 
     match result {
         Ok(txns) => HttpResponse::Ok().json(txns),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -376,7 +397,10 @@ pub async fn approve_withdrawal(
 
     let txn = match txn {
         Ok(Some(t)) => t,
-        _ => return HttpResponse::NotFound().json(serde_json::json!({"error": "Pending withdrawal not found"})),
+        _ => {
+            return HttpResponse::NotFound()
+                .json(serde_json::json!({"error": "Pending withdrawal not found"}))
+        }
     };
 
     // Mark as completed
@@ -397,7 +421,8 @@ pub async fn approve_withdrawal(
 
     let _ = config; // future: trigger actual Paystack transfer here
 
-    HttpResponse::Ok().json(serde_json::json!({"message": "Withdrawal approved", "transaction_id": txn_id}))
+    HttpResponse::Ok()
+        .json(serde_json::json!({"message": "Withdrawal approved", "transaction_id": txn_id}))
 }
 
 /// POST /api/admin/withdrawals/{id}/reject — Reject and refund a pending withdrawal
@@ -421,7 +446,10 @@ pub async fn reject_withdrawal(
 
     let txn = match txn {
         Ok(Some(t)) => t,
-        _ => return HttpResponse::NotFound().json(serde_json::json!({"error": "Pending withdrawal not found"})),
+        _ => {
+            return HttpResponse::NotFound()
+                .json(serde_json::json!({"error": "Pending withdrawal not found"}))
+        }
     };
 
     // Refund the held amount back to wallet

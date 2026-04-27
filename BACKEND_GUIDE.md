@@ -4,7 +4,7 @@
 
 Written for a developer who knows JavaScript/Dart but is learning Rust by understanding every line of the Qent car rental platform backend.
 
------------
+----
 
 ## Table of Contents
 
@@ -22,7 +22,7 @@ Written for a developer who knows JavaScript/Dart but is learning Rust by unders
 - [Part 12: Deployment & Configuration](#part-12-deployment--configuration)
 - [Part 13: Common Patterns Reference](#part-13-common-patterns-reference)
 
-----------
+----
 
 # Part 1: Rust Fundamentals You Need
 
@@ -361,7 +361,7 @@ Here, `handlers::auth::sign_up` is a function pointer (not a closure), but Actix
 
 Rust enums can hold data. They are closer to Dart's sealed classes or TypeScript's discriminated unions than to JavaScript's object-based enums.
 
-```RUST
+```rust
 // From src/models/booking.rs:
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "booking_status", rename_all = "lowercase")]

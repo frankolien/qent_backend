@@ -11,7 +11,9 @@ async fn send_waitlist_email(api_key: &str, email: &str, name: &str, position: i
     }
 
     let role_line = match role {
-        "host" => "You signed up as a <strong>host</strong> — we'll help you start earning with your car.",
+        "host" => {
+            "You signed up as a <strong>host</strong> — we'll help you start earning with your car."
+        }
         "both" => "You signed up as a <strong>renter and host</strong> — the best of both worlds.",
         _ => "You signed up as a <strong>renter</strong> — we'll find the perfect car for you.",
     };
@@ -64,7 +66,11 @@ async fn send_waitlist_email(api_key: &str, email: &str, name: &str, position: i
 </div>
 </body>
 </html>"#,
-        greeting = if name.is_empty() { String::new() } else { format!(" {}", name) },
+        greeting = if name.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", name)
+        },
         early_label = early_label,
         role_line = role_line,
     );
@@ -161,8 +167,9 @@ pub async fn join_waitlist(
                 "position": count
             }))
         }
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 

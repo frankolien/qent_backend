@@ -20,7 +20,9 @@ pub async fn initiate_payment(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let booking = match sqlx::query_as::<_, Booking>(
@@ -56,7 +58,10 @@ pub async fn initiate_payment(
     let client = reqwest::Client::new();
     let paystack_resp = client
         .post("https://api.paystack.co/transaction/initialize")
-        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.paystack_secret_key),
+        )
         .json(&serde_json::json!({
             "email": email,
             "amount": amount_kobo,
@@ -111,7 +116,10 @@ pub async fn paystack_webhook(
     // Verify Paystack signature (HMAC SHA-512)
     let signature = match req.headers().get("x-paystack-signature") {
         Some(sig) => sig.to_str().unwrap_or("").to_string(),
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Missing signature"})),
+        None => {
+            return HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Missing signature"}))
+        }
     };
 
     let mut mac = Hmac::<Sha512>::new_from_slice(config.paystack_secret_key.as_bytes())
@@ -120,12 +128,15 @@ pub async fn paystack_webhook(
     let expected = hex::encode(mac.finalize().into_bytes());
 
     if signature != expected {
-        return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Invalid signature"}));
+        return HttpResponse::Unauthorized()
+            .json(serde_json::json!({"error": "Invalid signature"}));
     }
 
     let body: PaystackWebhookEvent = match serde_json::from_slice(&body_bytes) {
         Ok(b) => b,
-        Err(_) => return HttpResponse::BadRequest().json(serde_json::json!({"error": "Invalid payload"})),
+        Err(_) => {
+            return HttpResponse::BadRequest().json(serde_json::json!({"error": "Invalid payload"}))
+        }
     };
 
     if body.event == "charge.success" {
@@ -142,30 +153,27 @@ pub async fn paystack_webhook(
 
         if let Ok(Some(payment)) = payment {
             // Update booking to confirmed
-            let _ = sqlx::query(
-                "UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2",
-            )
-            .bind(BookingStatus::Confirmed)
-            .bind(payment.booking_id)
-            .execute(pool.get_ref())
-            .await;
+            let _ =
+                sqlx::query("UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2")
+                    .bind(BookingStatus::Confirmed)
+                    .bind(payment.booking_id)
+                    .execute(pool.get_ref())
+                    .await;
 
             // Notify the host about the new confirmed booking
-            if let Ok(Some(booking)) = sqlx::query_as::<_, Booking>(
-                "SELECT * FROM bookings WHERE id = $1",
-            )
-            .bind(payment.booking_id)
-            .fetch_optional(pool.get_ref())
-            .await
+            if let Ok(Some(booking)) =
+                sqlx::query_as::<_, Booking>("SELECT * FROM bookings WHERE id = $1")
+                    .bind(payment.booking_id)
+                    .fetch_optional(pool.get_ref())
+                    .await
             {
                 // Get renter name for the notification
-                let renter_name = sqlx::query_scalar::<_, String>(
-                    "SELECT full_name FROM users WHERE id = $1",
-                )
-                .bind(payment.payer_id)
-                .fetch_one(pool.get_ref())
-                .await
-                .unwrap_or_else(|_| "Someone".to_string());
+                let renter_name =
+                    sqlx::query_scalar::<_, String>("SELECT full_name FROM users WHERE id = $1")
+                        .bind(payment.payer_id)
+                        .fetch_one(pool.get_ref())
+                        .await
+                        .unwrap_or_else(|_| "Someone".to_string());
 
                 // Get car name
                 let car_name = sqlx::query_scalar::<_, String>(
@@ -194,30 +202,31 @@ pub async fn paystack_webhook(
                 .await;
 
                 // Send booking confirmation email to the renter
-                let renter_email = sqlx::query_scalar::<_, String>(
-                    "SELECT email FROM users WHERE id = $1",
-                )
-                .bind(payment.payer_id)
-                .fetch_one(pool.get_ref())
-                .await
-                .unwrap_or_default();
+                let renter_email =
+                    sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
+                        .bind(payment.payer_id)
+                        .fetch_one(pool.get_ref())
+                        .await
+                        .unwrap_or_default();
 
                 if !renter_email.is_empty() {
                     let email_service = EmailService::new(config.resend_api_key.clone());
-                    email_service.send_booking_confirmation(
-                        &renter_email,
-                        &renter_name,
-                        &car_name,
-                        &booking.id.to_string(),
-                        booking.start_date,
-                        booking.end_date,
-                        booking.total_days,
-                        booking.subtotal,
-                        booking.service_fee,
-                        booking.protection_fee,
-                        booking.total_amount,
-                        reference,
-                    ).await;
+                    email_service
+                        .send_booking_confirmation(
+                            &renter_email,
+                            &renter_name,
+                            &car_name,
+                            &booking.id.to_string(),
+                            booking.start_date,
+                            booking.end_date,
+                            booking.total_days,
+                            booking.subtotal,
+                            booking.service_fee,
+                            booking.protection_fee,
+                            booking.total_amount,
+                            reference,
+                        )
+                        .await;
                 }
             }
 
@@ -276,7 +285,9 @@ pub async fn paystack_webhook(
 pub async fn get_wallet_balance(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let balance = sqlx::query_scalar::<_, f64>("SELECT wallet_balance FROM users WHERE id = $1")
@@ -286,7 +297,9 @@ pub async fn get_wallet_balance(req: HttpRequest, pool: web::Data<PgPool>) -> Ht
 
     match balance {
         Ok(b) => HttpResponse::Ok().json(serde_json::json!({"balance": b})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -300,12 +313,17 @@ pub async fn verify_payment(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let reference = match body["reference"].as_str() {
         Some(r) => r.to_string(),
-        None => return HttpResponse::BadRequest().json(serde_json::json!({"error": "Missing reference"})),
+        None => {
+            return HttpResponse::BadRequest()
+                .json(serde_json::json!({"error": "Missing reference"}))
+        }
     };
 
     // Check if payment exists and belongs to this user
@@ -319,27 +337,41 @@ pub async fn verify_payment(
 
     let payment = match payment {
         Ok(Some(p)) => p,
-        Ok(None) => return HttpResponse::NotFound().json(serde_json::json!({"error": "Payment not found"})),
-        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(None) => {
+            return HttpResponse::NotFound().json(serde_json::json!({"error": "Payment not found"}))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
     };
 
     // Already confirmed?
     if payment.status == PaymentStatus::Success {
-        return HttpResponse::Ok().json(serde_json::json!({"status": "success", "message": "Payment already verified"}));
+        return HttpResponse::Ok()
+            .json(serde_json::json!({"status": "success", "message": "Payment already verified"}));
     }
 
     // Verify with Paystack
     let client = reqwest::Client::new();
     let verify_resp = client
-        .get(format!("https://api.paystack.co/transaction/verify/{}", reference))
-        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .get(format!(
+            "https://api.paystack.co/transaction/verify/{}",
+            reference
+        ))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.paystack_secret_key),
+        )
         .send()
         .await;
 
     let paystack_data = match verify_resp {
         Ok(resp) => resp.json::<serde_json::Value>().await.unwrap_or_default(),
-        Err(e) => return HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": format!("Paystack error: {}", e)})),
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": format!("Paystack error: {}", e)}))
+        }
     };
 
     let paystack_status = paystack_data["data"]["status"].as_str().unwrap_or("");
@@ -352,38 +384,31 @@ pub async fn verify_payment(
     }
 
     // Payment confirmed — update payment status
-    let _ = sqlx::query(
-        "UPDATE payments SET status = $1 WHERE id = $2",
-    )
-    .bind(PaymentStatus::Success)
-    .bind(payment.id)
-    .execute(pool.get_ref())
-    .await;
+    let _ = sqlx::query("UPDATE payments SET status = $1 WHERE id = $2")
+        .bind(PaymentStatus::Success)
+        .bind(payment.id)
+        .execute(pool.get_ref())
+        .await;
 
     // Update booking to confirmed
-    let _ = sqlx::query(
-        "UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2",
-    )
-    .bind(BookingStatus::Confirmed)
-    .bind(payment.booking_id)
-    .execute(pool.get_ref())
-    .await;
+    let _ = sqlx::query("UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2")
+        .bind(BookingStatus::Confirmed)
+        .bind(payment.booking_id)
+        .execute(pool.get_ref())
+        .await;
 
     // Get booking for notification
-    if let Ok(Some(booking)) = sqlx::query_as::<_, Booking>(
-        "SELECT * FROM bookings WHERE id = $1",
-    )
-    .bind(payment.booking_id)
-    .fetch_optional(pool.get_ref())
-    .await
-    {
-        let renter_name = sqlx::query_scalar::<_, String>(
-            "SELECT full_name FROM users WHERE id = $1",
-        )
-        .bind(claims.sub)
-        .fetch_one(pool.get_ref())
+    if let Ok(Some(booking)) = sqlx::query_as::<_, Booking>("SELECT * FROM bookings WHERE id = $1")
+        .bind(payment.booking_id)
+        .fetch_optional(pool.get_ref())
         .await
-        .unwrap_or_else(|_| "Someone".to_string());
+    {
+        let renter_name =
+            sqlx::query_scalar::<_, String>("SELECT full_name FROM users WHERE id = $1")
+                .bind(claims.sub)
+                .fetch_one(pool.get_ref())
+                .await
+                .unwrap_or_else(|_| "Someone".to_string());
 
         let car_name = sqlx::query_scalar::<_, String>(
             "SELECT CONCAT(make, ' ', model, ' ', year) FROM cars WHERE id = $1",
@@ -418,7 +443,9 @@ pub async fn verify_payment(
 pub async fn get_wallet_transactions(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let transactions = sqlx::query_as::<_, WalletTransaction>(
@@ -430,7 +457,9 @@ pub async fn get_wallet_transactions(req: HttpRequest, pool: web::Data<PgPool>) 
 
     match transactions {
         Ok(t) => HttpResponse::Ok().json(t),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -443,7 +472,9 @@ pub async fn withdraw(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     if body.amount < 1000.0 {
@@ -501,7 +532,10 @@ pub async fn withdraw(
     let client = reqwest::Client::new();
     let recipient_resp = client
         .post("https://api.paystack.co/transferrecipient")
-        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.paystack_secret_key),
+        )
         .json(&serde_json::json!({
             "type": "nuban",
             "name": claims.sub.to_string(),
@@ -516,11 +550,15 @@ pub async fn withdraw(
         Ok(resp) => {
             let json: serde_json::Value = resp.json().await.unwrap_or_default();
             if json["status"].as_bool() != Some(true) {
-                let msg = json["message"].as_str().unwrap_or("Failed to create transfer recipient");
-                return HttpResponse::BadRequest()
-                    .json(serde_json::json!({"error": msg}));
+                let msg = json["message"]
+                    .as_str()
+                    .unwrap_or("Failed to create transfer recipient");
+                return HttpResponse::BadRequest().json(serde_json::json!({"error": msg}));
             }
-            json["data"]["recipient_code"].as_str().unwrap_or("").to_string()
+            json["data"]["recipient_code"]
+                .as_str()
+                .unwrap_or("")
+                .to_string()
         }
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -534,7 +572,10 @@ pub async fn withdraw(
 
     let transfer_resp = client
         .post("https://api.paystack.co/transfer")
-        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.paystack_secret_key),
+        )
         .json(&serde_json::json!({
             "source": "balance",
             "reason": "Qent host withdrawal",
@@ -550,8 +591,7 @@ pub async fn withdraw(
             let json: serde_json::Value = resp.json().await.unwrap_or_default();
             if json["status"].as_bool() != Some(true) {
                 let msg = json["message"].as_str().unwrap_or("Transfer failed");
-                return HttpResponse::BadRequest()
-                    .json(serde_json::json!({"error": msg}));
+                return HttpResponse::BadRequest().json(serde_json::json!({"error": msg}));
             }
 
             // Debit wallet
@@ -582,10 +622,8 @@ pub async fn withdraw(
                 "status": "processing"
             }))
         }
-        Err(e) => {
-            HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": format!("Transfer failed: {}", e)}))
-        }
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": format!("Transfer failed: {}", e)})),
     }
 }
 
@@ -593,7 +631,9 @@ pub async fn withdraw(
 pub async fn get_earnings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Total earnings, this month, pending (approved/active bookings)
@@ -641,8 +681,9 @@ pub async fn get_earnings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
             "platform_fee_percent": 15,
             "recent_earnings": recent
         })),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -653,7 +694,10 @@ pub async fn list_banks(config: web::Data<AppConfig>) -> HttpResponse {
     // Fetch banks from Paystack
     let paystack_resp = client
         .get("https://api.paystack.co/bank?country=nigeria")
-        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.paystack_secret_key),
+        )
         .send()
         .await;
 
@@ -669,10 +713,7 @@ pub async fn list_banks(config: web::Data<AppConfig>) -> HttpResponse {
     };
 
     // Fetch logos from nigerianbanks.xyz (best-effort)
-    let logos_resp = client
-        .get("https://nigerianbanks.xyz")
-        .send()
-        .await;
+    let logos_resp = client.get("https://nigerianbanks.xyz").send().await;
 
     let logo_map: std::collections::HashMap<String, String> = match logos_resp {
         Ok(r) => {
@@ -732,7 +773,10 @@ pub async fn verify_bank_account(
             "https://api.paystack.co/bank/resolve?account_number={}&bank_code={}",
             body.account_number, body.bank_code
         ))
-        .header("Authorization", format!("Bearer {}", config.paystack_secret_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.paystack_secret_key),
+        )
         .send()
         .await;
 
@@ -746,7 +790,9 @@ pub async fn verify_bank_account(
                     "bank_code": body.bank_code
                 }))
             } else {
-                let msg = json["message"].as_str().unwrap_or("Could not resolve account");
+                let msg = json["message"]
+                    .as_str()
+                    .unwrap_or("Could not resolve account");
                 HttpResponse::BadRequest().json(serde_json::json!({"error": msg}))
             }
         }
@@ -762,7 +808,9 @@ pub async fn request_refund(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let booking_id = path.into_inner();

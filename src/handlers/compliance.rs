@@ -10,7 +10,9 @@ const CURRENT_TOS_VERSION: &str = "1.0";
 pub async fn accept_terms(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let _ = sqlx::query(
@@ -39,7 +41,9 @@ pub async fn accept_terms(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
 pub async fn terms_status(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let result = sqlx::query_as::<_, (Option<String>, Option<chrono::NaiveDateTime>)>(
@@ -74,7 +78,9 @@ pub async fn request_deletion(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Check for active bookings
@@ -133,7 +139,9 @@ pub async fn request_deletion(
 pub async fn cancel_deletion(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let updated = sqlx::query(
@@ -148,7 +156,8 @@ pub async fn cancel_deletion(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
             log_action(pool.get_ref(), claims.sub, "cancel_deletion", &req, None).await;
             HttpResponse::Ok().json(serde_json::json!({"message": "Account deletion cancelled"}))
         }
-        _ => HttpResponse::NotFound().json(serde_json::json!({"error": "No pending deletion request found"})),
+        _ => HttpResponse::NotFound()
+            .json(serde_json::json!({"error": "No pending deletion request found"})),
     }
 }
 
@@ -156,7 +165,9 @@ pub async fn cancel_deletion(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
 pub async fn export_data(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Gather all user data
@@ -235,10 +246,13 @@ async fn log_action(
 pub async fn admin_audit_log(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
     if claims.role != UserRole::Admin {
-        return HttpResponse::Forbidden().json(serde_json::json!({"error": "Admin access required"}));
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Admin access required"}));
     }
 
     #[derive(sqlx::FromRow, serde::Serialize)]
@@ -262,7 +276,8 @@ pub async fn admin_audit_log(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
 
     match logs {
         Ok(entries) => HttpResponse::Ok().json(entries),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
