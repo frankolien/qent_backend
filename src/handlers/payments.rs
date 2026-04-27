@@ -4,6 +4,7 @@ use sha2::Sha512;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::services::push::PushService;
 use crate::models::{
     Booking, BookingStatus, Claims, EarningEntry, EarningsStats, InitiatePaymentRequest, Payment,
     PaymentInitResponse, PaymentStatus, PaystackWebhookEvent, TransactionType,
@@ -111,6 +112,7 @@ pub async fn paystack_webhook(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
+    push: web::Data<Option<PushService>>,
     body_bytes: web::Bytes,
 ) -> HttpResponse {
     // Verify Paystack signature (HMAC SHA-512)
@@ -184,22 +186,34 @@ pub async fn paystack_webhook(
                 .await
                 .unwrap_or_else(|_| "your car".to_string());
 
+                let push_title = "New Booking Confirmed!".to_string();
+                let push_body = format!("{} has booked your {} — payment confirmed.", renter_name, car_name);
+                let push_data = serde_json::json!({
+                    "booking_id": booking.id,
+                    "car_id": booking.car_id,
+                    "renter_id": payment.payer_id,
+                });
+
                 let _ = sqlx::query(
                     r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, data, created_at)
                     VALUES ($1, $2, $3, $4, $5, false, $6, NOW())"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(booking.host_id)
-                .bind("New Booking Confirmed!")
-                .bind(format!("{} has booked your {} — payment confirmed.", renter_name, car_name))
+                .bind(&push_title)
+                .bind(&push_body)
                 .bind("booking_confirmed")
-                .bind(serde_json::json!({
-                    "booking_id": booking.id,
-                    "car_id": booking.car_id,
-                    "renter_id": payment.payer_id,
-                }))
+                .bind(push_data.clone())
                 .execute(pool.get_ref())
                 .await;
+
+                if let Some(push) = push.get_ref().clone() {
+                    let pool = pool.get_ref().clone();
+                    let host_id = booking.host_id;
+                    tokio::spawn(async move {
+                        push.send_to_user(&pool, host_id, &push_title, &push_body, push_data).await;
+                    });
+                }
 
                 // Send booking confirmation email to the renter
                 let renter_email =
@@ -309,6 +323,7 @@ pub async fn verify_payment(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
+    push: web::Data<Option<PushService>>,
     body: web::Json<serde_json::Value>,
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
@@ -419,22 +434,34 @@ pub async fn verify_payment(
         .unwrap_or_else(|_| "your car".to_string());
 
         // Notify host
+        let push_title = "Payment Confirmed!".to_string();
+        let push_body = format!("{} has paid for your {} — ready for pickup.", renter_name, car_name);
+        let push_data = serde_json::json!({
+            "booking_id": booking.id,
+            "car_id": booking.car_id,
+            "renter_id": claims.sub,
+        });
+
         let _ = sqlx::query(
             r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, data, created_at)
             VALUES ($1, $2, $3, $4, $5, false, $6, NOW())"#,
         )
         .bind(Uuid::new_v4())
         .bind(booking.host_id)
-        .bind("Payment Confirmed!")
-        .bind(format!("{} has paid for your {} — ready for pickup.", renter_name, car_name))
+        .bind(&push_title)
+        .bind(&push_body)
         .bind("booking_confirmed")
-        .bind(serde_json::json!({
-            "booking_id": booking.id,
-            "car_id": booking.car_id,
-            "renter_id": claims.sub,
-        }))
+        .bind(push_data.clone())
         .execute(pool.get_ref())
         .await;
+
+        if let Some(push) = push.get_ref().clone() {
+            let pool = pool.get_ref().clone();
+            let host_id = booking.host_id;
+            tokio::spawn(async move {
+                push.send_to_user(&pool, host_id, &push_title, &push_body, push_data).await;
+            });
+        }
     }
 
     HttpResponse::Ok().json(serde_json::json!({"status": "success", "message": "Payment verified and booking confirmed"}))

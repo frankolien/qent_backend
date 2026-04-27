@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::Claims;
+use crate::services::push::PushService;
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct ConversationResponse {
@@ -319,6 +320,7 @@ pub async fn get_messages(
 pub async fn send_message(
     req: HttpRequest,
     pool: web::Data<PgPool>,
+    push: web::Data<Option<PushService>>,
     path: web::Path<Uuid>,
     body: web::Json<SendMessageRequest>,
 ) -> HttpResponse {
@@ -399,7 +401,36 @@ pub async fn send_message(
     .await;
 
     match result {
-        Ok(message) => HttpResponse::Created().json(message),
+        Ok(message) => {
+            // Push notification to the recipient (the OTHER participant)
+            if let Some(push) = push.get_ref().clone() {
+                let recipient_id = sqlx::query_scalar::<_, Uuid>(
+                    r#"SELECT CASE WHEN renter_id = $1 THEN host_id ELSE renter_id END
+                       FROM conversations WHERE id = $2"#,
+                )
+                .bind(user_id)
+                .bind(conversation_id)
+                .fetch_optional(pool.get_ref())
+                .await
+                .ok()
+                .flatten();
+
+                if let Some(recipient_id) = recipient_id {
+                    let pool = pool.get_ref().clone();
+                    let title = message.sender_name.clone();
+                    let body_text = body.content.clone();
+                    let payload = serde_json::json!({
+                        "type": "chat_message",
+                        "conversation_id": conversation_id.to_string(),
+                        "message_id": message_id.to_string(),
+                    });
+                    tokio::spawn(async move {
+                        push.send_to_user(&pool, recipient_id, &title, &body_text, payload).await;
+                    });
+                }
+            }
+            HttpResponse::Created().json(message)
+        }
         Err(e) => {
             HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
         }
