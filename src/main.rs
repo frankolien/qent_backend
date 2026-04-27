@@ -14,6 +14,7 @@ mod models;
 mod services;
 
 use crate::middleware::auth::validate_token;
+use crate::services::push::PushService;
 use crate::services::AppConfig;
 
 /// Background task: auto-complete bookings past their end_date (runs every hour)
@@ -120,6 +121,18 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("Qent API starting on {}", bind_addr);
 
+    // Initialize push notification service (optional — pushes are no-op if it fails)
+    let push_service = match PushService::from_env() {
+        Ok(svc) => {
+            log::info!("PushService initialized");
+            Some(svc)
+        }
+        Err(e) => {
+            log::warn!("PushService disabled: {}", e);
+            None
+        }
+    };
+
     // Spawn background auto-completion task
     let bg_pool = pool.clone();
     tokio::spawn(auto_complete_bookings(bg_pool));
@@ -168,6 +181,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(ws_manager.clone()))
+            .app_data(web::Data::new(push_service.clone()))
             .route("/health", web::get().to(handlers::health::health_check))
             .route("/ws", web::get().to(handlers::ws::ws_connect))
             .service(actix_files::Files::new("/uploads", "uploads").show_files_listing())

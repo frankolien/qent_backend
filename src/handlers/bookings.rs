@@ -7,11 +7,13 @@ use crate::models::{
     CreateBookingRequest, ProtectionPlan, UserRole,
 };
 use crate::services::email::EmailService;
+use crate::services::push::PushService;
 use crate::services::AppConfig;
 
 pub async fn create_booking(
     req: HttpRequest,
     pool: web::Data<PgPool>,
+    push: web::Data<Option<PushService>>,
     body: web::Json<CreateBookingRequest>,
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
@@ -134,6 +136,7 @@ pub async fn create_booking(
             // Notify host about new booking request
             let _ = create_notification(
                 pool.get_ref(),
+                push.get_ref().as_ref(),
                 car.host_id,
                 "New Booking Request",
                 &format!(
@@ -222,6 +225,7 @@ pub async fn update_booking_status(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
+    push: web::Data<Option<PushService>>,
     path: web::Path<Uuid>,
     body: web::Json<BookingActionRequest>,
 ) -> HttpResponse {
@@ -353,7 +357,9 @@ pub async fn update_booking_status(
             match new_status {
                 BookingStatus::Approved => {
                     let _ = create_notification(
-                        pool.get_ref(), booking.renter_id,
+                        pool.get_ref(),
+                        push.get_ref().as_ref(),
+                        booking.renter_id,
                         "Booking Approved",
                         &format!("Your booking for {} has been approved! Coordinate pickup with the host.", car_name),
                         "booking_approved", data,
@@ -362,6 +368,7 @@ pub async fn update_booking_status(
                 BookingStatus::Rejected => {
                     let _ = create_notification(
                         pool.get_ref(),
+                        push.get_ref().as_ref(),
                         booking.renter_id,
                         "Booking Declined",
                         &format!("Your booking for {} was declined by the host.", car_name),
@@ -379,6 +386,7 @@ pub async fn update_booking_status(
                     };
                     let _ = create_notification(
                         pool.get_ref(),
+                        push.get_ref().as_ref(),
                         notify_user,
                         "Booking Cancelled",
                         &format!("A booking for {} has been cancelled.", car_name),
@@ -390,6 +398,7 @@ pub async fn update_booking_status(
                 BookingStatus::Active => {
                     let _ = create_notification(
                         pool.get_ref(),
+                        push.get_ref().as_ref(),
                         booking.renter_id,
                         "Trip Started",
                         &format!(
@@ -404,6 +413,7 @@ pub async fn update_booking_status(
                 BookingStatus::Completed => {
                     let _ = create_notification(
                         pool.get_ref(),
+                        push.get_ref().as_ref(),
                         booking.renter_id,
                         "Trip Completed",
                         &format!("Your trip with {} is complete. Leave a review!", car_name),
@@ -487,6 +497,7 @@ pub async fn update_booking_status(
 /// Helper to create a notification record
 async fn create_notification(
     pool: &PgPool,
+    push: Option<&PushService>,
     user_id: Uuid,
     title: &str,
     message: &str,
@@ -502,9 +513,21 @@ async fn create_notification(
     .bind(title)
     .bind(message)
     .bind(notification_type)
-    .bind(data)
+    .bind(data.clone())
     .execute(pool)
     .await?;
+
+    if let Some(push) = push {
+        let payload = data.unwrap_or_else(|| serde_json::json!({}));
+        let pool = pool.clone();
+        let push = push.clone();
+        let title = title.to_string();
+        let message = message.to_string();
+        tokio::spawn(async move {
+            push.send_to_user(&pool, user_id, &title, &message, payload).await;
+        });
+    }
+
     Ok(())
 }
 
