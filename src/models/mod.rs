@@ -1,6 +1,7 @@
 pub mod booking;
 pub mod car;
 pub mod card;
+pub mod device_token;
 pub mod favorite;
 pub mod notification;
 pub mod partner;
@@ -12,6 +13,7 @@ pub mod user;
 pub use booking::*;
 pub use car::*;
 pub use card::*;
+pub use device_token::*;
 pub use favorite::*;
 pub use notification::*;
 pub use partner::*;

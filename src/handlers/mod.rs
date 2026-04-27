@@ -7,6 +7,7 @@ pub mod chat;
 pub mod compliance;
 pub mod damage_reports;
 pub mod dashboard;
+pub mod devices;
 pub mod favorites;
 pub mod health;
 pub mod notifications;

@@ -387,6 +387,15 @@ async fn main() -> std::io::Result<()> {
                                 "/notifications/read-all",
                                 web::post().to(handlers::notifications::mark_all_read),
                             )
+                            // Device tokens (push notifications)
+                            .route(
+                                "/devices/register",
+                                web::post().to(handlers::devices::register_device_token),
+                            )
+                            .route(
+                                "/devices/{token}",
+                                web::delete().to(handlers::devices::unregister_device_token),
+                            )
                             // Partnership
                             .route("/partner/apply", web::post().to(handlers::partner::apply))
                             .route(
