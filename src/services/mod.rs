@@ -1,6 +1,7 @@
 pub mod apple_auth;
 pub mod email;
 pub mod google_auth;
+pub mod push;
 
 use serde::Deserialize;
 
