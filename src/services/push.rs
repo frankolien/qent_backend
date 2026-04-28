@@ -49,11 +49,18 @@ pub struct PushService {
 
 impl PushService {
     pub fn from_env() -> Result<Self, String> {
-        let path = std::env::var("FIREBASE_SERVICE_ACCOUNT_PATH")
-            .map_err(|_| "FIREBASE_SERVICE_ACCOUNT_PATH not set".to_string())?;
-
-        let json = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read {}: {}", path, e))?;
+        // Prefer inline JSON env var (Render / serverless friendly).
+        // Fall back to a file path for local dev.
+        let json = if let Ok(inline) = std::env::var("FIREBASE_SERVICE_ACCOUNT_JSON") {
+            inline
+        } else {
+            let path = std::env::var("FIREBASE_SERVICE_ACCOUNT_PATH").map_err(|_| {
+                "Neither FIREBASE_SERVICE_ACCOUNT_JSON nor FIREBASE_SERVICE_ACCOUNT_PATH is set"
+                    .to_string()
+            })?;
+            std::fs::read_to_string(&path)
+                .map_err(|e| format!("Failed to read {}: {}", path, e))?
+        };
 
         let sa: ServiceAccount = serde_json::from_str(&json)
             .map_err(|e| format!("Failed to parse service account JSON: {}", e))?;
