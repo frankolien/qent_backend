@@ -1,11 +1,22 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::{Claims, SavedCard, SavedCardPublic};
 use crate::services::AppConfig;
 
-/// List all saved cards for the authenticated user.
+/// GET /api/cards — List all saved cards for the authenticated user.
+#[utoipa::path(
+    get,
+    path = "/api/cards",
+    tag = "Cards",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Saved cards (default first, then by date)", body = Vec<SavedCardPublic>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn list_cards(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -31,7 +42,19 @@ pub async fn list_cards(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRespon
     }
 }
 
-/// Set a card as the default payment method.
+/// POST /api/cards/{id}/default — Set a card as the default payment method.
+#[utoipa::path(
+    post,
+    path = "/api/cards/{id}/default",
+    tag = "Cards",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Card ID")),
+    responses(
+        (status = 200, description = "Default card updated"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Card not found"),
+    ),
+)]
 pub async fn set_default_card(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -74,7 +97,19 @@ pub async fn set_default_card(
     HttpResponse::Ok().json(serde_json::json!({"message": "Default card updated"}))
 }
 
-/// Delete a saved card.
+/// DELETE /api/cards/{id} — Delete a saved card.
+#[utoipa::path(
+    delete,
+    path = "/api/cards/{id}",
+    tag = "Cards",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Card ID")),
+    responses(
+        (status = 200, description = "Card deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Card not found"),
+    ),
+)]
 pub async fn delete_card(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -103,7 +138,21 @@ pub async fn delete_card(
     }
 }
 
-/// Charge a saved card for a booking (using Paystack authorization).
+/// POST /api/cards/charge — Charge a saved card for a booking (Paystack recurring authorization).
+#[utoipa::path(
+    post,
+    path = "/api/cards/charge",
+    tag = "Cards",
+    security(("bearer_auth" = [])),
+    request_body = ChargeSavedCardRequest,
+    responses(
+        (status = 200, description = "Charge successful with Paystack reference"),
+        (status = 400, description = "Charge failed at provider"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Card not found"),
+        (status = 500, description = "Payment provider error"),
+    ),
+)]
 pub async fn charge_saved_card(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -175,7 +224,7 @@ pub async fn charge_saved_card(
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, ToSchema)]
 pub struct ChargeSavedCardRequest {
     pub card_id: Uuid,
     pub amount: f64,

@@ -1,9 +1,10 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq, ToSchema)]
 #[sqlx(type_name = "booking_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum BookingStatus {
@@ -16,7 +17,7 @@ pub enum BookingStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Booking {
     pub id: Uuid,
     pub car_id: Uuid,
@@ -37,7 +38,7 @@ pub struct Booking {
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, ToSchema)]
 pub struct BookingWithCar {
     pub id: Uuid,
     pub car_id: Uuid,
@@ -62,7 +63,7 @@ pub struct BookingWithCar {
     pub renter_name: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateBookingRequest {
     pub car_id: Uuid,
     pub start_date: NaiveDate,
@@ -70,13 +71,13 @@ pub struct CreateBookingRequest {
     pub protection_plan_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct BookingActionRequest {
     pub action: BookingAction,
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum BookingAction {
     Approve,

@@ -14,10 +14,13 @@ use utoipa::{
 
 use crate::handlers;
 use crate::models::{
-    AppleSignInRequest, AuthResponseWithRefresh, Car, CarStatus, CreateCarRequest,
-    ForgotPasswordRequest, GoogleSignInRequest, RefreshTokenRequest, ResetPasswordRequest,
-    SignInRequest, SignUpRequest, UpdateCarRequest, UpdateProfileRequest, UserPublic, UserRole,
-    VerificationStatus, VerifyIdentityRequest,
+    AppleSignInRequest, AuthResponseWithRefresh, Booking, BookingAction, BookingActionRequest,
+    BookingStatus, BookingWithCar, Car, CarStatus, CreateBookingRequest, CreateCarRequest,
+    EarningEntry, EarningsStats, ForgotPasswordRequest, GoogleSignInRequest,
+    InitiatePaymentRequest, Payment, PaymentInitResponse, PaymentStatus, PayoutRequest,
+    RefreshTokenRequest, ResetPasswordRequest, SavedCardPublic, SignInRequest, SignUpRequest,
+    TransactionType, UpdateCarRequest, UpdateProfileRequest, UserPublic, UserRole,
+    VerificationStatus, VerifyAccountRequest, VerifyIdentityRequest, WalletTransaction,
 };
 
 #[derive(OpenApi)]
@@ -62,6 +65,28 @@ use crate::models::{
         handlers::favorites::toggle_favorite,
         handlers::favorites::get_favorites,
         handlers::favorites::check_favorite,
+        // Bookings
+        handlers::bookings::create_booking,
+        handlers::bookings::get_booking,
+        handlers::bookings::get_my_bookings,
+        handlers::bookings::update_booking_status,
+        handlers::bookings::get_host_pending_bookings,
+        // Payments
+        handlers::payments::initiate_payment,
+        handlers::payments::paystack_webhook,
+        handlers::payments::verify_payment,
+        handlers::payments::get_wallet_balance,
+        handlers::payments::get_wallet_transactions,
+        handlers::payments::withdraw,
+        handlers::payments::get_earnings,
+        handlers::payments::list_banks,
+        handlers::payments::verify_bank_account,
+        handlers::payments::request_refund,
+        // Cards
+        handlers::cards::list_cards,
+        handlers::cards::set_default_card,
+        handlers::cards::delete_card,
+        handlers::cards::charge_saved_card,
     ),
     components(schemas(
         // Auth request bodies
@@ -84,6 +109,27 @@ use crate::models::{
         CarStatus,
         CreateCarRequest,
         UpdateCarRequest,
+        // Bookings
+        Booking,
+        BookingWithCar,
+        BookingStatus,
+        BookingAction,
+        BookingActionRequest,
+        CreateBookingRequest,
+        // Payments
+        Payment,
+        PaymentStatus,
+        TransactionType,
+        InitiatePaymentRequest,
+        PaymentInitResponse,
+        PayoutRequest,
+        VerifyAccountRequest,
+        WalletTransaction,
+        EarningsStats,
+        EarningEntry,
+        // Cards
+        SavedCardPublic,
+        crate::handlers::cards::ChargeSavedCardRequest,
     )),
     modifiers(&SecurityAddon),
     tags(
@@ -91,6 +137,9 @@ use crate::models::{
         (name = "Users", description = "Public user profiles"),
         (name = "Cars", description = "Car listings: search, browse, host CRUD"),
         (name = "Favorites", description = "User saved cars"),
+        (name = "Bookings", description = "Booking lifecycle: create, approve/reject, activate, complete"),
+        (name = "Payments", description = "Paystack payments, wallet, withdrawals, banks, refunds"),
+        (name = "Cards", description = "Saved card management for recurring charges"),
     ),
 )]
 pub struct ApiDoc;

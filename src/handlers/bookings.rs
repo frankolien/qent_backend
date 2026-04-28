@@ -10,6 +10,21 @@ use crate::services::email::EmailService;
 use crate::services::push::PushService;
 use crate::services::AppConfig;
 
+/// POST /api/bookings — Renter creates a new booking request for a car
+#[utoipa::path(
+    post,
+    path = "/api/bookings",
+    tag = "Bookings",
+    security(("bearer_auth" = [])),
+    request_body = CreateBookingRequest,
+    responses(
+        (status = 201, description = "Booking created in pending state", body = Booking),
+        (status = 400, description = "Invalid dates or self-booking attempt"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Car not found or not available"),
+        (status = 409, description = "Car already booked for these dates"),
+    ),
+)]
 pub async fn create_booking(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -155,6 +170,19 @@ pub async fn create_booking(
     }
 }
 
+/// GET /api/bookings/{id} — Fetch a single booking (renter, host, or admin only)
+#[utoipa::path(
+    get,
+    path = "/api/bookings/{id}",
+    tag = "Bookings",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Booking ID")),
+    responses(
+        (status = 200, description = "Booking details", body = Booking),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Booking not found"),
+    ),
+)]
 pub async fn get_booking(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -189,6 +217,17 @@ pub async fn get_booking(
     }
 }
 
+/// GET /api/bookings/mine — All bookings where the user is renter or host
+#[utoipa::path(
+    get,
+    path = "/api/bookings/mine",
+    tag = "Bookings",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "List of bookings (with car details)", body = Vec<BookingWithCar>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_my_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -221,6 +260,22 @@ pub async fn get_my_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
     }
 }
 
+/// POST /api/bookings/{id}/action — Approve, reject, cancel, activate, or complete a booking
+#[utoipa::path(
+    post,
+    path = "/api/bookings/{id}/action",
+    tag = "Bookings",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Booking ID")),
+    request_body = BookingActionRequest,
+    responses(
+        (status = 200, description = "Updated booking", body = Booking),
+        (status = 400, description = "Invalid state transition"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not allowed for this user/role"),
+        (status = 404, description = "Booking not found"),
+    ),
+)]
 pub async fn update_booking_status(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -531,7 +586,17 @@ async fn create_notification(
     Ok(())
 }
 
-/// Get pending bookings for host (bookings awaiting their approval)
+/// GET /api/bookings/host/pending — Bookings awaiting host approval
+#[utoipa::path(
+    get,
+    path = "/api/bookings/host/pending",
+    tag = "Bookings",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Pending bookings", body = Vec<BookingWithCar>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_host_pending_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,

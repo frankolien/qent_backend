@@ -7,12 +7,26 @@ use uuid::Uuid;
 use crate::services::push::PushService;
 use crate::models::{
     Booking, BookingStatus, Claims, EarningEntry, EarningsStats, InitiatePaymentRequest, Payment,
-    PaymentInitResponse, PaymentStatus, PaystackWebhookEvent, TransactionType,
+    PaymentInitResponse, PaymentStatus, PaystackWebhookEvent, PayoutRequest, TransactionType,
     VerifyAccountRequest, WalletTransaction,
 };
 use crate::services::email::EmailService;
 use crate::services::AppConfig;
 
+/// POST /api/payments/initiate — Start a Paystack payment for an approved booking
+#[utoipa::path(
+    post,
+    path = "/api/payments/initiate",
+    tag = "Payments",
+    security(("bearer_auth" = [])),
+    request_body = InitiatePaymentRequest,
+    responses(
+        (status = 200, description = "Paystack authorization URL + reference", body = PaymentInitResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Booking not found or not approved"),
+        (status = 500, description = "Payment provider error"),
+    ),
+)]
 pub async fn initiate_payment(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -108,6 +122,18 @@ pub async fn initiate_payment(
     })
 }
 
+/// POST /api/payments/webhook — Paystack server-to-server event hook (HMAC SHA-512 signed)
+#[utoipa::path(
+    post,
+    path = "/api/payments/webhook",
+    tag = "Payments",
+    request_body(content = String, description = "Raw Paystack webhook event JSON", content_type = "application/json"),
+    responses(
+        (status = 200, description = "Event processed"),
+        (status = 400, description = "Invalid payload"),
+        (status = 401, description = "Missing or invalid x-paystack-signature header"),
+    ),
+)]
 pub async fn paystack_webhook(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -296,6 +322,17 @@ pub async fn paystack_webhook(
     HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
 }
 
+/// GET /api/payments/wallet — Current wallet balance for the authenticated user
+#[utoipa::path(
+    get,
+    path = "/api/payments/wallet",
+    tag = "Payments",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "{ \"balance\": <amount in NGN> }"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_wallet_balance(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -319,6 +356,19 @@ pub async fn get_wallet_balance(req: HttpRequest, pool: web::Data<PgPool>) -> Ht
 
 /// POST /api/payments/verify — Verify a payment with Paystack after user returns from browser.
 /// This is the fallback for when the webhook can't reach the server (e.g., local dev).
+#[utoipa::path(
+    post,
+    path = "/api/payments/verify",
+    tag = "Payments",
+    security(("bearer_auth" = [])),
+    request_body(content = serde_json::Value, description = "{ \"reference\": \"qent_<uuid>\" }"),
+    responses(
+        (status = 200, description = "Verification result with status (success or pending)"),
+        (status = 400, description = "Missing reference"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Payment not found"),
+    ),
+)]
 pub async fn verify_payment(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -467,6 +517,17 @@ pub async fn verify_payment(
     HttpResponse::Ok().json(serde_json::json!({"status": "success", "message": "Payment verified and booking confirmed"}))
 }
 
+/// GET /api/payments/wallet/transactions — Wallet transaction ledger for the user
+#[utoipa::path(
+    get,
+    path = "/api/payments/wallet/transactions",
+    tag = "Payments",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "List of wallet transactions, most recent first", body = Vec<WalletTransaction>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_wallet_transactions(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -491,6 +552,19 @@ pub async fn get_wallet_transactions(req: HttpRequest, pool: web::Data<PgPool>) 
 }
 
 /// POST /api/payments/withdraw — Host withdraws wallet balance via Paystack transfer
+#[utoipa::path(
+    post,
+    path = "/api/payments/withdraw",
+    tag = "Payments",
+    security(("bearer_auth" = [])),
+    request_body = PayoutRequest,
+    responses(
+        (status = 200, description = "Withdrawal initiated (or queued for admin approval if > ₦100,000)"),
+        (status = 400, description = "Below minimum, insufficient balance, or invalid bank account"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Payment provider error"),
+    ),
+)]
 pub async fn withdraw(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -655,6 +729,16 @@ pub async fn withdraw(
 }
 
 /// GET /api/payments/earnings — Host earnings breakdown
+#[utoipa::path(
+    get,
+    path = "/api/payments/earnings",
+    tag = "Payments",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Stats (total/monthly/pending/trips), wallet balance, recent earnings"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_earnings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -715,6 +799,15 @@ pub async fn get_earnings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
 }
 
 /// GET /api/payments/banks — List Nigerian banks (via Paystack + logos)
+#[utoipa::path(
+    get,
+    path = "/api/payments/banks",
+    tag = "Payments",
+    responses(
+        (status = 200, description = "Banks with code, name, and best-effort logo URL"),
+        (status = 500, description = "Failed to fetch from upstream"),
+    ),
+)]
 pub async fn list_banks(config: web::Data<AppConfig>) -> HttpResponse {
     let client = reqwest::Client::new();
 
@@ -790,6 +883,17 @@ pub async fn list_banks(config: web::Data<AppConfig>) -> HttpResponse {
 }
 
 /// POST /api/payments/verify-account — Verify bank account details
+#[utoipa::path(
+    post,
+    path = "/api/payments/verify-account",
+    tag = "Payments",
+    request_body = VerifyAccountRequest,
+    responses(
+        (status = 200, description = "{ account_name, account_number, bank_code }"),
+        (status = 400, description = "Could not resolve account"),
+        (status = 500, description = "Verification failed"),
+    ),
+)]
 pub async fn verify_bank_account(
     config: web::Data<AppConfig>,
     body: web::Json<VerifyAccountRequest>,
@@ -828,6 +932,20 @@ pub async fn verify_bank_account(
     }
 }
 
+/// POST /api/payments/refund/{id} — Renter requests refund for a cancelled booking (90% returned)
+#[utoipa::path(
+    post,
+    path = "/api/payments/refund/{id}",
+    tag = "Payments",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Booking ID")),
+    responses(
+        (status = 200, description = "Refund initiated with refund_amount"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "No cancelled booking found"),
+        (status = 409, description = "Already refunded"),
+    ),
+)]
 pub async fn request_refund(
     req: HttpRequest,
     pool: web::Data<PgPool>,
