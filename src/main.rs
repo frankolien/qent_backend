@@ -248,6 +248,10 @@ async fn main() -> std::io::Result<()> {
                         "/users/{id}/rating",
                         web::get().to(handlers::reviews::get_user_rating),
                     )
+                    .route(
+                        "/cars/{id}/reviews",
+                        web::get().to(handlers::reviews::get_car_reviews),
+                    )
                     // Banks - public (for withdrawal form)
                     .route(
                         "/payments/banks",

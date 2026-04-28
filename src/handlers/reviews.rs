@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::models::{Claims, CreateReviewRequest, Review, UserRatingSummary};
+use crate::models::{CarReview, Claims, CreateReviewRequest, Review, UserRatingSummary};
 
 pub async fn create_review(
     req: HttpRequest,
@@ -88,6 +88,39 @@ pub async fn get_user_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) ->
 
     match reviews {
         Ok(r) => HttpResponse::Ok().json(r),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
+    }
+}
+
+pub async fn get_car_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
+    let car_id = path.into_inner();
+
+    let result = sqlx::query_as::<_, CarReview>(
+        r#"
+        SELECT
+            r.id,
+            r.booking_id,
+            r.reviewer_id,
+            COALESCE(NULLIF(TRIM(u.full_name), ''), u.email, 'User') AS reviewer_name,
+            u.profile_photo_url AS reviewer_photo_url,
+            r.rating,
+            r.comment,
+            r.created_at
+        FROM reviews r
+        JOIN bookings b ON b.id = r.booking_id
+        JOIN users u ON u.id = r.reviewer_id
+        WHERE b.car_id = $1 AND r.reviewer_id = b.renter_id
+        ORDER BY r.created_at DESC
+        "#,
+    )
+    .bind(car_id)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(reviews) => HttpResponse::Ok().json(reviews),
         Err(e) => {
             HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
         }

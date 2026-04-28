@@ -30,3 +30,16 @@ pub struct UserRatingSummary {
     pub average_rating: f64,
     pub total_reviews: i64,
 }
+
+/// A review enriched with reviewer profile data — what the client renders.
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct CarReview {
+    pub id: Uuid,
+    pub booking_id: Uuid,
+    pub reviewer_id: Uuid,
+    pub reviewer_name: String,
+    pub reviewer_photo_url: Option<String>,
+    pub rating: i32,
+    pub comment: Option<String>,
+    pub created_at: NaiveDateTime,
+}
