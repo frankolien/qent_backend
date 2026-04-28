@@ -401,6 +401,14 @@ async fn main() -> std::io::Result<()> {
                                 "/notifications/read-all",
                                 web::post().to(handlers::notifications::mark_all_read),
                             )
+                            .route(
+                                "/notifications/delete-bulk",
+                                web::post().to(handlers::notifications::delete_bulk),
+                            )
+                            .route(
+                                "/notifications/{id}",
+                                web::delete().to(handlers::notifications::delete_notification),
+                            )
                             // Device tokens (push notifications)
                             .route(
                                 "/devices/register",
