@@ -17,10 +17,11 @@ use crate::models::{
     AppleSignInRequest, AuthResponseWithRefresh, Booking, BookingAction, BookingActionRequest,
     BookingStatus, BookingWithCar, Car, CarStatus, CreateBookingRequest, CreateCarRequest,
     EarningEntry, EarningsStats, ForgotPasswordRequest, GoogleSignInRequest,
-    InitiatePaymentRequest, Payment, PaymentInitResponse, PaymentStatus, PayoutRequest,
-    RefreshTokenRequest, ResetPasswordRequest, SavedCardPublic, SignInRequest, SignUpRequest,
-    TransactionType, UpdateCarRequest, UpdateProfileRequest, UserPublic, UserRole,
-    VerificationStatus, VerifyAccountRequest, VerifyIdentityRequest, WalletTransaction,
+    InitiatePaymentRequest, Notification, Payment, PaymentInitResponse, PaymentStatus,
+    PayoutRequest, RefreshTokenRequest, RegisterDeviceTokenRequest, ResetPasswordRequest,
+    SavedCardPublic, SignInRequest, SignUpRequest, TransactionType, UpdateCarRequest,
+    UpdateProfileRequest, UserPublic, UserRole, VerificationStatus, VerifyAccountRequest,
+    VerifyIdentityRequest, WalletTransaction,
 };
 
 #[derive(OpenApi)]
@@ -87,6 +88,26 @@ use crate::models::{
         handlers::cards::set_default_card,
         handlers::cards::delete_card,
         handlers::cards::charge_saved_card,
+        // Chat
+        handlers::chat::get_or_create_conversation,
+        handlers::chat::get_conversations,
+        handlers::chat::get_messages,
+        handlers::chat::send_message,
+        handlers::chat::delete_conversation,
+        handlers::chat::mark_read,
+        // Notifications
+        handlers::notifications::get_notifications,
+        handlers::notifications::mark_read,
+        handlers::notifications::mark_all_read,
+        handlers::notifications::delete_notification,
+        handlers::notifications::delete_bulk,
+        // Devices
+        handlers::devices::register_device_token,
+        handlers::devices::unregister_device_token,
+        // Stories
+        handlers::stories::get_stories,
+        handlers::stories::create_story,
+        handlers::stories::delete_story,
     ),
     components(schemas(
         // Auth request bodies
@@ -130,6 +151,19 @@ use crate::models::{
         // Cards
         SavedCardPublic,
         crate::handlers::cards::ChargeSavedCardRequest,
+        // Chat
+        crate::handlers::chat::ConversationResponse,
+        crate::handlers::chat::MessageResponse,
+        crate::handlers::chat::CreateConversationRequest,
+        crate::handlers::chat::SendMessageRequest,
+        // Notifications
+        Notification,
+        crate::handlers::notifications::BulkDeleteRequest,
+        // Devices
+        RegisterDeviceTokenRequest,
+        // Stories
+        crate::handlers::stories::StoryResponse,
+        crate::handlers::stories::CreateStoryRequest,
     )),
     modifiers(&SecurityAddon),
     tags(
@@ -140,6 +174,10 @@ use crate::models::{
         (name = "Bookings", description = "Booking lifecycle: create, approve/reject, activate, complete"),
         (name = "Payments", description = "Paystack payments, wallet, withdrawals, banks, refunds"),
         (name = "Cards", description = "Saved card management for recurring charges"),
+        (name = "Chat", description = "1:1 conversations between renter and host with realtime messages"),
+        (name = "Notifications", description = "In-app notification feed (FCM push is delivered separately)"),
+        (name = "Devices", description = "Push notification token registration"),
+        (name = "Stories", description = "Host-posted 24-hour expiring stories"),
     ),
 )]
 pub struct ApiDoc;

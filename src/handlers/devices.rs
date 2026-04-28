@@ -3,6 +3,19 @@ use sqlx::PgPool;
 
 use crate::models::{Claims, RegisterDeviceTokenRequest};
 
+/// POST /api/devices/register — Register an FCM/APNs/web-push token for the user
+#[utoipa::path(
+    post,
+    path = "/api/devices/register",
+    tag = "Devices",
+    security(("bearer_auth" = [])),
+    request_body = RegisterDeviceTokenRequest,
+    responses(
+        (status = 200, description = "Device registered (upserts on token conflict)"),
+        (status = 400, description = "Missing token or unsupported platform"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn register_device_token(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -43,6 +56,18 @@ pub async fn register_device_token(
     }
 }
 
+/// DELETE /api/devices/{token} — Unregister a push token (e.g., on logout)
+#[utoipa::path(
+    delete,
+    path = "/api/devices/{token}",
+    tag = "Devices",
+    security(("bearer_auth" = [])),
+    params(("token" = String, Path, description = "The device token string to remove")),
+    responses(
+        (status = 200, description = "Device unregistered"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn unregister_device_token(
     req: HttpRequest,
     pool: web::Data<PgPool>,

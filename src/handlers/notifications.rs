@@ -1,15 +1,27 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::{Claims, Notification};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct BulkDeleteRequest {
     pub ids: Vec<Uuid>,
 }
 
+/// GET /api/notifications — List the user's most recent 50 notifications (newest first)
+#[utoipa::path(
+    get,
+    path = "/api/notifications",
+    tag = "Notifications",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Notifications", body = Vec<Notification>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_notifications(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -33,6 +45,18 @@ pub async fn get_notifications(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
     }
 }
 
+/// POST /api/notifications/{id}/read — Mark a single notification as read
+#[utoipa::path(
+    post,
+    path = "/api/notifications/{id}/read",
+    tag = "Notifications",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Notification ID")),
+    responses(
+        (status = 200, description = "Marked as read"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn mark_read(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -56,6 +80,17 @@ pub async fn mark_read(
     HttpResponse::Ok().json(serde_json::json!({"message": "Marked as read"}))
 }
 
+/// POST /api/notifications/read-all — Mark every notification for the user as read
+#[utoipa::path(
+    post,
+    path = "/api/notifications/read-all",
+    tag = "Notifications",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "All marked as read"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn mark_all_read(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -72,6 +107,18 @@ pub async fn mark_all_read(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     HttpResponse::Ok().json(serde_json::json!({"message": "All marked as read"}))
 }
 
+/// DELETE /api/notifications/{id} — Delete a single notification
+#[utoipa::path(
+    delete,
+    path = "/api/notifications/{id}",
+    tag = "Notifications",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Notification ID")),
+    responses(
+        (status = 200, description = "Deleted"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn delete_notification(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -100,6 +147,18 @@ pub async fn delete_notification(
     }
 }
 
+/// POST /api/notifications/delete-bulk — Delete multiple notifications by IDs in one call
+#[utoipa::path(
+    post,
+    path = "/api/notifications/delete-bulk",
+    tag = "Notifications",
+    security(("bearer_auth" = [])),
+    request_body = BulkDeleteRequest,
+    responses(
+        (status = 200, description = "{ deleted: <count> }"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn delete_bulk(
     req: HttpRequest,
     pool: web::Data<PgPool>,

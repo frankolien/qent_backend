@@ -2,11 +2,12 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::Claims;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct StoryResponse {
     pub id: Uuid,
     pub host_id: Uuid,
@@ -20,7 +21,7 @@ pub struct StoryResponse {
     pub host_photo: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateStoryRequest {
     pub image_url: String,
     pub car_id: Option<Uuid>,
@@ -28,6 +29,16 @@ pub struct CreateStoryRequest {
 }
 
 /// GET /api/stories - Get all active (non-expired) stories
+#[utoipa::path(
+    get,
+    path = "/api/stories",
+    tag = "Stories",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Active stories with host info", body = Vec<StoryResponse>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_stories(_req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let result = sqlx::query_as::<_, StoryResponse>(
         r#"SELECT
@@ -51,7 +62,19 @@ pub async fn get_stories(_req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
     }
 }
 
-/// POST /api/stories - Create a story (host only)
+/// POST /api/stories - Create a story (host only). Expires after 24 hours.
+#[utoipa::path(
+    post,
+    path = "/api/stories",
+    tag = "Stories",
+    security(("bearer_auth" = [])),
+    request_body = CreateStoryRequest,
+    responses(
+        (status = 201, description = "Story created", body = StoryResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Only hosts can create stories"),
+    ),
+)]
 pub async fn create_story(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -122,6 +145,18 @@ pub async fn create_story(
 }
 
 /// DELETE /api/stories/{id} - Delete own story
+#[utoipa::path(
+    delete,
+    path = "/api/stories/{id}",
+    tag = "Stories",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Story ID")),
+    responses(
+        (status = 200, description = "Story deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Story not found or not owned by caller"),
+    ),
+)]
 pub async fn delete_story(
     req: HttpRequest,
     pool: web::Data<PgPool>,

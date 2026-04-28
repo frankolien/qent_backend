@@ -2,12 +2,13 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::Claims;
 use crate::services::push::PushService;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct ConversationResponse {
     pub id: Uuid,
     pub car_id: Uuid,
@@ -26,7 +27,7 @@ pub struct ConversationResponse {
     pub car_photo: String,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct MessageResponse {
     pub id: Uuid,
     pub conversation_id: Uuid,
@@ -40,7 +41,7 @@ pub struct MessageResponse {
     pub sender_name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateConversationRequest {
     pub car_id: Uuid,
     /// The other user in the conversation. Can be the host (if caller is renter)
@@ -49,13 +50,28 @@ pub struct CreateConversationRequest {
     pub other_user_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SendMessageRequest {
     pub content: String,
     pub message_type: String,
     pub reply_to_id: Option<Uuid>,
 }
 
+/// POST /api/chat/conversations — Get an existing conversation for (car, renter) or create one
+#[utoipa::path(
+    post,
+    path = "/api/chat/conversations",
+    tag = "Chat",
+    security(("bearer_auth" = [])),
+    request_body = CreateConversationRequest,
+    responses(
+        (status = 200, description = "Existing conversation", body = ConversationResponse),
+        (status = 201, description = "Newly created conversation", body = ConversationResponse),
+        (status = 400, description = "Cannot start a conversation with yourself"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Car not found"),
+    ),
+)]
 pub async fn get_or_create_conversation(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -199,6 +215,17 @@ pub async fn get_or_create_conversation(
     }
 }
 
+/// GET /api/chat/conversations — List all conversations the user participates in
+#[utoipa::path(
+    get,
+    path = "/api/chat/conversations",
+    tag = "Chat",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Conversations sorted by last_message_at desc", body = Vec<ConversationResponse>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_conversations(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -244,6 +271,19 @@ pub async fn get_conversations(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
     }
 }
 
+/// GET /api/chat/conversations/{id}/messages — Fetch messages and mark them read
+#[utoipa::path(
+    get,
+    path = "/api/chat/conversations/{id}/messages",
+    tag = "Chat",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Conversation ID")),
+    responses(
+        (status = 200, description = "Messages in chronological order", body = Vec<MessageResponse>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not a participant in this conversation"),
+    ),
+)]
 pub async fn get_messages(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -317,6 +357,20 @@ pub async fn get_messages(
     }
 }
 
+/// POST /api/chat/conversations/{id}/messages — Send a message; pushes to the recipient
+#[utoipa::path(
+    post,
+    path = "/api/chat/conversations/{id}/messages",
+    tag = "Chat",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Conversation ID")),
+    request_body = SendMessageRequest,
+    responses(
+        (status = 201, description = "Created message", body = MessageResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not a participant in this conversation"),
+    ),
+)]
 pub async fn send_message(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -438,6 +492,18 @@ pub async fn send_message(
 }
 
 /// DELETE /api/chat/conversations/{id} - Delete a conversation and its messages
+#[utoipa::path(
+    delete,
+    path = "/api/chat/conversations/{id}",
+    tag = "Chat",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Conversation ID")),
+    responses(
+        (status = 200, description = "Conversation deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not a participant in this conversation"),
+    ),
+)]
 pub async fn delete_conversation(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -487,6 +553,18 @@ pub async fn delete_conversation(
     }
 }
 
+/// POST /api/chat/conversations/{id}/read — Reset the caller's unread count for a conversation
+#[utoipa::path(
+    post,
+    path = "/api/chat/conversations/{id}/read",
+    tag = "Chat",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Conversation ID")),
+    responses(
+        (status = 200, description = "Marked as read"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn mark_read(
     req: HttpRequest,
     pool: web::Data<PgPool>,
