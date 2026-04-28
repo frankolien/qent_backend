@@ -5,6 +5,21 @@ use uuid::Uuid;
 use crate::models::{Claims, CreateDamageReportRequest, DamageReport};
 
 /// POST /api/damage-reports — Submit a damage/return report for a booking
+#[utoipa::path(
+    post,
+    path = "/api/damage-reports",
+    tag = "Damage Reports",
+    security(("bearer_auth" = [])),
+    request_body = CreateDamageReportRequest,
+    responses(
+        (status = 201, description = "Report created", body = DamageReport),
+        (status = 400, description = "Booking not in active/completed state"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not your booking"),
+        (status = 404, description = "Booking not found"),
+        (status = 409, description = "Already submitted a report"),
+    ),
+)]
 pub async fn create_report(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -90,7 +105,19 @@ pub async fn create_report(
     }
 }
 
-/// GET /api/damage-reports/{booking_id} — Get damage reports for a booking
+/// GET /api/damage-reports/{id} — Get all damage reports for a booking
+#[utoipa::path(
+    get,
+    path = "/api/damage-reports/{id}",
+    tag = "Damage Reports",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Booking ID")),
+    responses(
+        (status = 200, description = "Reports for this booking", body = Vec<DamageReport>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not your booking"),
+    ),
+)]
 pub async fn get_reports(
     req: HttpRequest,
     pool: web::Data<PgPool>,

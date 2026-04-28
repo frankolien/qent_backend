@@ -20,6 +20,18 @@ fn require_admin(req: &HttpRequest) -> Result<Claims, HttpResponse> {
     Ok(claims)
 }
 
+/// GET /api/admin/users — List all users (admin only)
+#[utoipa::path(
+    get,
+    path = "/api/admin/users",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "All users (public profile shape)", body = Vec<crate::models::UserPublic>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
 pub async fn list_users(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     if let Err(resp) = require_admin(&req) {
         return resp;
@@ -41,6 +53,18 @@ pub async fn list_users(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRespon
     }
 }
 
+/// GET /api/admin/cars — List all cars across all hosts (admin only)
+#[utoipa::path(
+    get,
+    path = "/api/admin/cars",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "All cars with rating + host info", body = Vec<Car>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
 pub async fn list_all_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     if let Err(resp) = require_admin(&req) {
         return resp;
@@ -74,6 +98,20 @@ pub async fn list_all_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     }
 }
 
+/// POST /api/admin/cars/{id}/approve — Approve a car listing (pending → active)
+#[utoipa::path(
+    post,
+    path = "/api/admin/cars/{id}/approve",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "Car approved"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "Car not found or not pending"),
+    ),
+)]
 pub async fn approve_car(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -104,6 +142,20 @@ pub async fn approve_car(
     }
 }
 
+/// POST /api/admin/cars/{id}/reject — Reject a car listing
+#[utoipa::path(
+    post,
+    path = "/api/admin/cars/{id}/reject",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "Car rejected"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "Car not found"),
+    ),
+)]
 pub async fn reject_car(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -131,6 +183,20 @@ pub async fn reject_car(
     }
 }
 
+/// POST /api/admin/users/{id}/verify — Mark user identity as verified
+#[utoipa::path(
+    post,
+    path = "/api/admin/users/{id}/verify",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, description = "User verified"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "User not found"),
+    ),
+)]
 pub async fn verify_user(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -159,6 +225,20 @@ pub async fn verify_user(
     }
 }
 
+/// POST /api/admin/users/{id}/reject — Reject user identity verification
+#[utoipa::path(
+    post,
+    path = "/api/admin/users/{id}/reject",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, description = "Verification rejected"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "User not found"),
+    ),
+)]
 pub async fn reject_user_verification(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -187,6 +267,20 @@ pub async fn reject_user_verification(
     }
 }
 
+/// POST /api/admin/users/{id}/deactivate — Disable a user account
+#[utoipa::path(
+    post,
+    path = "/api/admin/users/{id}/deactivate",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, description = "User deactivated"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "User not found"),
+    ),
+)]
 pub async fn deactivate_user(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -214,6 +308,18 @@ pub async fn deactivate_user(
     }
 }
 
+/// GET /api/admin/analytics — Platform-wide stats (users, cars, bookings, revenue)
+#[utoipa::path(
+    get,
+    path = "/api/admin/analytics",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "{ total_users, total_cars, total_bookings, total_revenue, active_bookings, pending_car_approvals }"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
 pub async fn get_analytics(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     if let Err(resp) = require_admin(&req) {
         return resp;
@@ -265,6 +371,18 @@ pub async fn get_analytics(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     }))
 }
 
+/// GET /api/admin/bookings — Latest 100 bookings across the platform
+#[utoipa::path(
+    get,
+    path = "/api/admin/bookings",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Bookings", body = Vec<Booking>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
 pub async fn list_all_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     if let Err(resp) = require_admin(&req) {
         return resp;
@@ -283,6 +401,18 @@ pub async fn list_all_bookings(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
     }
 }
 
+/// GET /api/admin/payments — Latest 100 payments across the platform
+#[utoipa::path(
+    get,
+    path = "/api/admin/payments",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Payments", body = Vec<Payment>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
 pub async fn list_all_payments(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     if let Err(resp) = require_admin(&req) {
         return resp;
@@ -301,6 +431,20 @@ pub async fn list_all_payments(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
     }
 }
 
+/// POST /api/admin/bookings/{id}/dispute-refund — Cancel booking + issue full refund
+#[utoipa::path(
+    post,
+    path = "/api/admin/bookings/{id}/dispute-refund",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Booking ID")),
+    responses(
+        (status = 200, description = "Refund issued + booking cancelled"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "Booking not found"),
+    ),
+)]
 pub async fn handle_dispute_refund(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -353,6 +497,17 @@ pub async fn handle_dispute_refund(
 }
 
 /// GET /api/admin/withdrawals/pending — List pending withdrawal approvals
+#[utoipa::path(
+    get,
+    path = "/api/admin/withdrawals/pending",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Pending withdrawal transactions", body = Vec<WalletTransaction>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
 pub async fn list_pending_withdrawals(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     if let Err(resp) = require_admin(&req) {
         return resp;
@@ -375,6 +530,19 @@ pub async fn list_pending_withdrawals(req: HttpRequest, pool: web::Data<PgPool>)
 }
 
 /// POST /api/admin/withdrawals/{id}/approve — Approve a pending withdrawal
+#[utoipa::path(
+    post,
+    path = "/api/admin/withdrawals/{id}/approve",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Wallet transaction ID")),
+    responses(
+        (status = 200, description = "Withdrawal approved"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "Pending withdrawal not found"),
+    ),
+)]
 pub async fn approve_withdrawal(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -426,6 +594,19 @@ pub async fn approve_withdrawal(
 }
 
 /// POST /api/admin/withdrawals/{id}/reject — Reject and refund a pending withdrawal
+#[utoipa::path(
+    post,
+    path = "/api/admin/withdrawals/{id}/reject",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Wallet transaction ID")),
+    responses(
+        (status = 200, description = "Withdrawal rejected, funds returned to wallet"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 404, description = "Pending withdrawal not found"),
+    ),
+)]
 pub async fn reject_withdrawal(
     req: HttpRequest,
     pool: web::Data<PgPool>,

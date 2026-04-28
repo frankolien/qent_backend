@@ -7,6 +7,16 @@ use crate::models::{Claims, UserRole};
 const CURRENT_TOS_VERSION: &str = "1.0";
 
 /// POST /api/auth/accept-terms — Record user's consent to ToS + Privacy Policy
+#[utoipa::path(
+    post,
+    path = "/api/auth/accept-terms",
+    tag = "Compliance",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "{ message, tos_version }"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn accept_terms(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -38,6 +48,16 @@ pub async fn accept_terms(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
 }
 
 /// GET /api/auth/terms-status — Check if user has accepted current ToS
+#[utoipa::path(
+    get,
+    path = "/api/auth/terms-status",
+    tag = "Compliance",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "{ current_version, accepted_version, accepted_at, needs_acceptance }"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn terms_status(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -71,6 +91,18 @@ pub async fn terms_status(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
 }
 
 /// POST /api/account/request-deletion — Request account deletion (30-day grace period)
+#[utoipa::path(
+    post,
+    path = "/api/account/request-deletion",
+    tag = "Compliance",
+    security(("bearer_auth" = [])),
+    request_body(content = serde_json::Value, description = "Optional { \"reason\": \"...\" }"),
+    responses(
+        (status = 200, description = "Deletion scheduled in 30 days"),
+        (status = 400, description = "Active bookings or non-zero wallet balance"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn request_deletion(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -136,6 +168,17 @@ pub async fn request_deletion(
 }
 
 /// POST /api/account/cancel-deletion — Cancel a pending deletion request
+#[utoipa::path(
+    post,
+    path = "/api/account/cancel-deletion",
+    tag = "Compliance",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Deletion cancelled"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "No pending deletion request"),
+    ),
+)]
 pub async fn cancel_deletion(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -162,6 +205,17 @@ pub async fn cancel_deletion(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
 }
 
 /// GET /api/account/export — Export all user data (NDPA right of access)
+#[utoipa::path(
+    get,
+    path = "/api/account/export",
+    tag = "Compliance",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "User profile + bookings + payments + reviews"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found"),
+    ),
+)]
 pub async fn export_data(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -243,6 +297,17 @@ async fn log_action(
 }
 
 /// Admin: GET /api/admin/audit-log — View audit trail
+#[utoipa::path(
+    get,
+    path = "/api/admin/audit-log",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Last 200 audit entries"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
 pub async fn admin_audit_log(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,

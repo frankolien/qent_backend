@@ -7,8 +7,20 @@ use uuid::Uuid;
 use crate::models::Claims;
 use crate::services::AppConfig;
 
-/// POST /api/upload — Upload a file (image, voice note, etc.)
+/// POST /api/upload — Upload a file (image, voice note, etc.). Multipart form-data, max 10MB.
 /// Returns { "url": "/uploads/filename" }
+#[utoipa::path(
+    post,
+    path = "/api/upload",
+    tag = "Upload",
+    security(("bearer_auth" = [])),
+    request_body(content = String, description = "Multipart form-data with the file. Allowed: jpg/jpeg/png/gif/webp/mp3/m4a/aac/ogg/wav/opus", content_type = "multipart/form-data"),
+    responses(
+        (status = 200, description = "{ url }"),
+        (status = 400, description = "No file, disallowed type, or > 10MB"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn upload_file(
     req: HttpRequest,
     mut payload: Multipart,

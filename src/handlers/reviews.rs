@@ -5,6 +5,20 @@ use validator::Validate;
 
 use crate::models::{CarReview, Claims, CreateReviewRequest, Review, UserRatingSummary};
 
+/// POST /api/reviews — Create a review for a completed booking
+#[utoipa::path(
+    post,
+    path = "/api/reviews",
+    tag = "Reviews",
+    security(("bearer_auth" = [])),
+    request_body = CreateReviewRequest,
+    responses(
+        (status = 201, description = "Review created", body = Review),
+        (status = 400, description = "Validation error or booking not completed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Already reviewed this booking"),
+    ),
+)]
 pub async fn create_review(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -76,6 +90,16 @@ pub async fn create_review(
     }
 }
 
+/// GET /api/users/{id}/reviews — Reviews where this user is the reviewee
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}/reviews",
+    tag = "Reviews",
+    params(("id" = Uuid, Path, description = "Reviewee user ID")),
+    responses(
+        (status = 200, description = "Reviews newest first", body = Vec<Review>),
+    ),
+)]
 pub async fn get_user_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let user_id = path.into_inner();
 
@@ -94,6 +118,16 @@ pub async fn get_user_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) ->
     }
 }
 
+/// GET /api/cars/{id}/reviews — Renter reviews for a specific car (with reviewer profile)
+#[utoipa::path(
+    get,
+    path = "/api/cars/{id}/reviews",
+    tag = "Reviews",
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "Car reviews newest first", body = Vec<CarReview>),
+    ),
+)]
 pub async fn get_car_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let car_id = path.into_inner();
 
@@ -127,6 +161,16 @@ pub async fn get_car_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> 
     }
 }
 
+/// GET /api/users/{id}/rating — Aggregated rating + review count for a user
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}/rating",
+    tag = "Reviews",
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, description = "Rating summary", body = UserRatingSummary),
+    ),
+)]
 pub async fn get_user_rating(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let user_id = path.into_inner();
 

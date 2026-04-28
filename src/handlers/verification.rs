@@ -2,15 +2,16 @@ use actix_web::{web, HttpResponse};
 use chrono::{Duration, Utc};
 use rand::Rng;
 use sqlx::PgPool;
+use utoipa::ToSchema;
 
 use crate::services::AppConfig;
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, ToSchema)]
 pub struct SendCodeRequest {
     pub email: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, ToSchema)]
 pub struct VerifyCodeRequest {
     pub email: String,
     pub code: String,
@@ -23,7 +24,18 @@ fn generate_code() -> String {
     code.to_string()
 }
 
-/// Send verification code to email via Resend, store in DB
+/// POST /api/auth/send-code — Email a 4-digit verification code (5-min expiry)
+#[utoipa::path(
+    post,
+    path = "/api/auth/send-code",
+    tag = "Auth",
+    request_body = SendCodeRequest,
+    responses(
+        (status = 200, description = "{ message, expires_in_seconds }"),
+        (status = 400, description = "Invalid email"),
+        (status = 500, description = "Failed to send email"),
+    ),
+)]
 pub async fn send_code(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -84,7 +96,17 @@ pub async fn send_code(
     }
 }
 
-/// Verify the code entered by the user
+/// POST /api/auth/verify-code — Verify the 4-digit code emailed to the user
+#[utoipa::path(
+    post,
+    path = "/api/auth/verify-code",
+    tag = "Auth",
+    request_body = VerifyCodeRequest,
+    responses(
+        (status = 200, description = "{ message, verified }"),
+        (status = 400, description = "Code not found, expired, used, or wrong"),
+    ),
+)]
 pub async fn verify_code(
     pool: web::Data<PgPool>,
     body: web::Json<VerifyCodeRequest>,

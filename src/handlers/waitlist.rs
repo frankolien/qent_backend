@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
 use sqlx::PgPool;
+use utoipa::ToSchema;
 
 use crate::services::AppConfig;
 
@@ -102,7 +103,7 @@ async fn send_waitlist_email(api_key: &str, email: &str, name: &str, position: i
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct WaitlistRequest {
     pub email: String,
     pub phone: Option<String>,
@@ -112,7 +113,17 @@ pub struct WaitlistRequest {
     pub referral_code: Option<String>,
 }
 
-/// POST /api/waitlist — Join the waitlist (public, no auth)
+/// POST /api/waitlist — Join the waitlist (public, no auth). Sends a welcome email asynchronously.
+#[utoipa::path(
+    post,
+    path = "/api/waitlist",
+    tag = "Waitlist",
+    request_body = WaitlistRequest,
+    responses(
+        (status = 200, description = "{ message, position }"),
+        (status = 400, description = "Invalid email"),
+    ),
+)]
 pub async fn join_waitlist(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -174,6 +185,14 @@ pub async fn join_waitlist(
 }
 
 /// GET /api/waitlist/count — Public count for social proof
+#[utoipa::path(
+    get,
+    path = "/api/waitlist/count",
+    tag = "Waitlist",
+    responses(
+        (status = 200, description = "{ count }"),
+    ),
+)]
 pub async fn waitlist_count(pool: web::Data<PgPool>) -> HttpResponse {
     let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM waitlist")
         .fetch_one(pool.get_ref())

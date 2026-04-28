@@ -15,13 +15,15 @@ use utoipa::{
 use crate::handlers;
 use crate::models::{
     AppleSignInRequest, AuthResponseWithRefresh, Booking, BookingAction, BookingActionRequest,
-    BookingStatus, BookingWithCar, Car, CarStatus, CreateBookingRequest, CreateCarRequest,
-    EarningEntry, EarningsStats, ForgotPasswordRequest, GoogleSignInRequest,
-    InitiatePaymentRequest, Notification, Payment, PaymentInitResponse, PaymentStatus,
-    PayoutRequest, RefreshTokenRequest, RegisterDeviceTokenRequest, ResetPasswordRequest,
+    BookingStatus, BookingWithCar, Car, CarReview, CarStatus, CreateBookingRequest,
+    CreateCarRequest, CreateDamageReportRequest, CreatePartnerApplicationRequest,
+    CreateReviewRequest, DamageReport, EarningEntry, EarningsStats, ForgotPasswordRequest,
+    GoogleSignInRequest, HostDashboard, InitiatePaymentRequest, Notification, PartnerApplication,
+    Payment, PaymentInitResponse, PaymentStatus, PayoutRequest, PlanTier, ProtectionPlan,
+    RefreshTokenRequest, RegisterDeviceTokenRequest, ResetPasswordRequest, Review,
     SavedCardPublic, SignInRequest, SignUpRequest, TransactionType, UpdateCarRequest,
-    UpdateProfileRequest, UserPublic, UserRole, VerificationStatus, VerifyAccountRequest,
-    VerifyIdentityRequest, WalletTransaction,
+    UpdateProfileRequest, UserPublic, UserRatingSummary, UserRole, VerificationStatus,
+    VerifyAccountRequest, VerifyIdentityRequest, WalletTransaction,
 };
 
 #[derive(OpenApi)]
@@ -108,6 +110,57 @@ use crate::models::{
         handlers::stories::get_stories,
         handlers::stories::create_story,
         handlers::stories::delete_story,
+        // Reviews
+        handlers::reviews::create_review,
+        handlers::reviews::get_user_reviews,
+        handlers::reviews::get_car_reviews,
+        handlers::reviews::get_user_rating,
+        // Partner
+        handlers::partner::apply,
+        handlers::partner::activate_car,
+        handlers::partner::get_application,
+        handlers::partner::dashboard,
+        // Compliance
+        handlers::compliance::accept_terms,
+        handlers::compliance::terms_status,
+        handlers::compliance::request_deletion,
+        handlers::compliance::cancel_deletion,
+        handlers::compliance::export_data,
+        handlers::compliance::admin_audit_log,
+        // Damage Reports
+        handlers::damage_reports::create_report,
+        handlers::damage_reports::get_reports,
+        // Verification (auth-related)
+        handlers::verification::send_code,
+        handlers::verification::verify_code,
+        // Admin
+        handlers::admin::list_users,
+        handlers::admin::list_all_cars,
+        handlers::admin::approve_car,
+        handlers::admin::reject_car,
+        handlers::admin::verify_user,
+        handlers::admin::reject_user_verification,
+        handlers::admin::deactivate_user,
+        handlers::admin::get_analytics,
+        handlers::admin::list_all_bookings,
+        handlers::admin::list_all_payments,
+        handlers::admin::handle_dispute_refund,
+        handlers::admin::list_pending_withdrawals,
+        handlers::admin::approve_withdrawal,
+        handlers::admin::reject_withdrawal,
+        // Dashboard
+        handlers::dashboard::get_host_stats,
+        handlers::dashboard::get_host_listings,
+        handlers::dashboard::increment_view,
+        // Waitlist
+        handlers::waitlist::join_waitlist,
+        handlers::waitlist::waitlist_count,
+        // Upload
+        handlers::upload::upload_file,
+        // Health
+        handlers::health::health_check,
+        // Protection Plans
+        handlers::protection_plans::list_plans,
     ),
     components(schemas(
         // Auth request bodies
@@ -164,6 +217,29 @@ use crate::models::{
         // Stories
         crate::handlers::stories::StoryResponse,
         crate::handlers::stories::CreateStoryRequest,
+        // Reviews
+        Review,
+        CarReview,
+        CreateReviewRequest,
+        UserRatingSummary,
+        // Partner
+        PartnerApplication,
+        CreatePartnerApplicationRequest,
+        HostDashboard,
+        // Damage Reports
+        DamageReport,
+        CreateDamageReportRequest,
+        // Verification
+        crate::handlers::verification::SendCodeRequest,
+        crate::handlers::verification::VerifyCodeRequest,
+        // Dashboard
+        crate::handlers::dashboard::HostStats,
+        crate::handlers::dashboard::ListingSummary,
+        // Waitlist
+        crate::handlers::waitlist::WaitlistRequest,
+        // Protection Plans
+        ProtectionPlan,
+        PlanTier,
     )),
     modifiers(&SecurityAddon),
     tags(
@@ -178,6 +254,16 @@ use crate::models::{
         (name = "Notifications", description = "In-app notification feed (FCM push is delivered separately)"),
         (name = "Devices", description = "Push notification token registration"),
         (name = "Stories", description = "Host-posted 24-hour expiring stories"),
+        (name = "Reviews", description = "Booking reviews and per-user/per-car aggregates"),
+        (name = "Partner", description = "Host onboarding flow: application + activation + dashboard"),
+        (name = "Compliance", description = "ToS acceptance, account deletion, NDPA data export, audit log"),
+        (name = "Damage Reports", description = "Pre/post-trip vehicle condition reports"),
+        (name = "Admin", description = "Admin-only moderation, analytics, withdrawal approvals"),
+        (name = "Dashboard", description = "Host dashboard stats and listings"),
+        (name = "Waitlist", description = "Pre-launch email signup"),
+        (name = "Upload", description = "File uploads (images + voice notes)"),
+        (name = "Health", description = "Service liveness/readiness"),
+        (name = "Protection Plans", description = "Insurance/protection tiers offered at booking"),
     ),
 )]
 pub struct ApiDoc;

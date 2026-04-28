@@ -12,6 +12,20 @@ use crate::models::{
 };
 use crate::services::AppConfig;
 
+/// POST /api/partner/apply — Submit a host partner application; auto-creates a pending car listing and upgrades role to host
+#[utoipa::path(
+    post,
+    path = "/api/partner/apply",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    request_body = CreatePartnerApplicationRequest,
+    responses(
+        (status = 201, description = "Application submitted; returns application + new JWT with host role"),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Active application already exists"),
+    ),
+)]
 pub async fn apply(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -145,7 +159,17 @@ pub async fn apply(
     }))
 }
 
-/// Activate the partner's most recent car listing (pendingapproval → active)
+/// POST /api/partner/activate-car — Activate the partner's most recent car listing (pendingapproval → active)
+#[utoipa::path(
+    post,
+    path = "/api/partner/activate-car",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "{ message, cars_activated }"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn activate_car(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -181,6 +205,18 @@ pub async fn activate_car(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResp
     }
 }
 
+/// GET /api/partner/application — Caller's most recent partner application
+#[utoipa::path(
+    get,
+    path = "/api/partner/application",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Latest application", body = PartnerApplication),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "No application found"),
+    ),
+)]
 pub async fn get_application(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -207,6 +243,17 @@ pub async fn get_application(req: HttpRequest, pool: web::Data<PgPool>) -> HttpR
     }
 }
 
+/// GET /api/partner/dashboard — Aggregated host dashboard (earnings, listings, ratings)
+#[utoipa::path(
+    get,
+    path = "/api/partner/dashboard",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Host dashboard summary", body = HostDashboard),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn dashboard(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
