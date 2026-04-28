@@ -11,11 +11,15 @@ use sqlx::PgPool;
 mod handlers;
 mod middleware;
 mod models;
+mod openapi;
 mod services;
 
 use crate::middleware::auth::validate_token;
+use crate::openapi::ApiDoc;
 use crate::services::push::PushService;
 use crate::services::AppConfig;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 /// Background task: auto-complete bookings past their end_date (runs every hour)
 async fn auto_complete_bookings(pool: PgPool) {
@@ -185,6 +189,12 @@ async fn main() -> std::io::Result<()> {
             .route("/health", web::get().to(handlers::health::health_check))
             .route("/ws", web::get().to(handlers::ws::ws_connect))
             .service(actix_files::Files::new("/uploads", "uploads").show_files_listing())
+            // OpenAPI / Swagger UI — Swagger UI at /api/docs/, raw spec at
+            // /api/docs/openapi.json. Mounted before auth scope so it's public.
+            .service(
+                SwaggerUi::new("/api/docs/{_:.*}")
+                    .url("/api/docs/openapi.json", ApiDoc::openapi()),
+            )
             .service(
                 web::scope("/api")
                     // Auth - public (rate limited)

@@ -31,6 +31,17 @@ fn generate_refresh_token() -> String {
         .collect()
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/auth/signup",
+    tag = "Auth",
+    request_body = SignUpRequest,
+    responses(
+        (status = 201, description = "Account created", body = AuthResponseWithRefresh),
+        (status = 400, description = "Validation error or email already in use"),
+        (status = 500, description = "Internal server error"),
+    ),
+)]
 pub async fn sign_up(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -131,6 +142,17 @@ pub async fn sign_up(
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/auth/signin",
+    tag = "Auth",
+    request_body = SignInRequest,
+    responses(
+        (status = 200, description = "Authenticated", body = AuthResponseWithRefresh),
+        (status = 401, description = "Invalid credentials"),
+        (status = 500, description = "Internal server error"),
+    ),
+)]
 pub async fn sign_in(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -197,6 +219,16 @@ pub async fn sign_in(
 }
 
 /// POST /api/auth/refresh — Get new JWT using refresh token
+#[utoipa::path(
+    post,
+    path = "/api/auth/refresh",
+    tag = "Auth",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "New access + refresh token issued", body = AuthResponseWithRefresh),
+        (status = 401, description = "Refresh token invalid or revoked"),
+    ),
+)]
 pub async fn refresh_token(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -246,6 +278,15 @@ pub async fn refresh_token(
 }
 
 /// POST /api/auth/forgot-password — Send password reset email
+#[utoipa::path(
+    post,
+    path = "/api/auth/forgot-password",
+    tag = "Auth",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "Reset email sent if account exists"),
+    ),
+)]
 pub async fn forgot_password(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -309,6 +350,16 @@ pub async fn forgot_password(
 }
 
 /// POST /api/auth/reset-password — Reset password with token
+#[utoipa::path(
+    post,
+    path = "/api/auth/reset-password",
+    tag = "Auth",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "Password updated"),
+        (status = 400, description = "Invalid or expired token"),
+    ),
+)]
 pub async fn reset_password(
     pool: web::Data<PgPool>,
     body: web::Json<ResetPasswordRequest>,
@@ -361,6 +412,16 @@ pub async fn reset_password(
     HttpResponse::Ok().json(serde_json::json!({"message": "Password reset successfully"}))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/profile",
+    tag = "Auth",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Current authenticated user", body = UserPublic),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = req.extensions().get::<Claims>().cloned();
     let claims = match claims {
@@ -385,6 +446,16 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRespo
 }
 
 /// Get any user's public profile by ID (for displaying names/photos in chat, car listings, etc.)
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}",
+    tag = "Users",
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, description = "Public profile", body = UserPublic),
+        (status = 404, description = "User not found"),
+    ),
+)]
 pub async fn get_user_public(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let user_id = path.into_inner();
 
@@ -410,6 +481,18 @@ pub async fn get_user_public(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> 
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/profile",
+    tag = "Auth",
+    security(("bearer_auth" = [])),
+    request_body = UpdateProfileRequest,
+    responses(
+        (status = 200, description = "Updated profile", body = UserPublic),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn update_profile(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -450,6 +533,17 @@ pub async fn update_profile(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/profile/verify-identity",
+    tag = "Auth",
+    security(("bearer_auth" = [])),
+    request_body = VerifyIdentityRequest,
+    responses(
+        (status = 200, description = "Verification submitted, status now pending review"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn verify_identity(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -495,6 +589,16 @@ pub async fn verify_identity(
 ///
 /// Apple only sends `fullName` on the first sign-in ever for a given user/team,
 /// so the mobile app must pass it on the first call. Subsequent calls can omit it.
+#[utoipa::path(
+    post,
+    path = "/api/auth/signin/apple",
+    tag = "Auth",
+    request_body = AppleSignInRequest,
+    responses(
+        (status = 200, description = "Authenticated via Apple", body = AuthResponseWithRefresh),
+        (status = 401, description = "Invalid Apple identity token"),
+    ),
+)]
 pub async fn sign_in_with_apple(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -637,6 +741,16 @@ pub async fn sign_in_with_apple(
 /// Accepts a Google OpenID Connect `idToken`, verifies it against Google's JWKS,
 /// and signs the user into Qent. Existing users are matched by `google_id` first,
 /// then linked by verified email, otherwise a new renter account is created.
+#[utoipa::path(
+    post,
+    path = "/api/auth/signin/google",
+    tag = "Auth",
+    request_body = GoogleSignInRequest,
+    responses(
+        (status = 200, description = "Authenticated via Google", body = AuthResponseWithRefresh),
+        (status = 401, description = "Invalid Google ID token"),
+    ),
+)]
 pub async fn sign_in_with_google(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
