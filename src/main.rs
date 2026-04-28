@@ -175,6 +175,10 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("http://localhost:5174")
             .allowed_origin("http://localhost:5175")
             .allowed_origin("http://localhost:5176")
+            .allowed_origin("http://127.0.0.1:5500") // VS Code Live Server
+            .allowed_origin("http://localhost:5500")
+            .allowed_origin("http://127.0.0.1:5501")
+            .allowed_origin("http://localhost:5501")
             .allow_any_method()
             .allow_any_header()
             .max_age(3600);
