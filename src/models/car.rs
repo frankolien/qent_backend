@@ -1,10 +1,11 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq, ToSchema)]
 #[sqlx(type_name = "car_status", rename_all = "lowercase")]
 pub enum CarStatus {
     Active,
@@ -13,7 +14,7 @@ pub enum CarStatus {
     Rejected,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Car {
     pub id: Uuid,
     pub host_id: Uuid,
@@ -41,7 +42,7 @@ pub struct Car {
     pub host_name: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateCarRequest {
     #[validate(length(min = 1))]
     pub make: String,
@@ -62,7 +63,7 @@ pub struct CreateCarRequest {
     pub available_to: Option<NaiveDate>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateCarRequest {
     pub description: Option<String>,
     pub price_per_day: Option<f64>,
@@ -75,7 +76,8 @@ pub struct UpdateCarRequest {
     pub available_to: Option<NaiveDate>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CarSearchQuery {
     pub location: Option<String>,
     pub min_price: Option<f64>,
@@ -94,7 +96,8 @@ pub struct CarSearchQuery {
     pub per_page: Option<i64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct HomepageQuery {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,

@@ -14,9 +14,10 @@ use utoipa::{
 
 use crate::handlers;
 use crate::models::{
-    AppleSignInRequest, AuthResponseWithRefresh, ForgotPasswordRequest, GoogleSignInRequest,
-    RefreshTokenRequest, ResetPasswordRequest, SignInRequest, SignUpRequest,
-    UpdateProfileRequest, UserPublic, UserRole, VerificationStatus, VerifyIdentityRequest,
+    AppleSignInRequest, AuthResponseWithRefresh, Car, CarStatus, CreateCarRequest,
+    ForgotPasswordRequest, GoogleSignInRequest, RefreshTokenRequest, ResetPasswordRequest,
+    SignInRequest, SignUpRequest, UpdateCarRequest, UpdateProfileRequest, UserPublic, UserRole,
+    VerificationStatus, VerifyIdentityRequest,
 };
 
 #[derive(OpenApi)]
@@ -48,6 +49,19 @@ use crate::models::{
         handlers::auth::sign_in_with_google,
         // Users (public)
         handlers::auth::get_user_public,
+        // Cars
+        handlers::cars::search_cars,
+        handlers::cars::get_homepage,
+        handlers::cars::get_car,
+        handlers::cars::create_car,
+        handlers::cars::get_host_cars,
+        handlers::cars::update_car,
+        handlers::cars::deactivate_car,
+        handlers::cars::get_booked_dates,
+        // Favorites
+        handlers::favorites::toggle_favorite,
+        handlers::favorites::get_favorites,
+        handlers::favorites::check_favorite,
     ),
     components(schemas(
         // Auth request bodies
@@ -65,11 +79,18 @@ use crate::models::{
         UserPublic,
         UserRole,
         VerificationStatus,
+        // Cars
+        Car,
+        CarStatus,
+        CreateCarRequest,
+        UpdateCarRequest,
     )),
     modifiers(&SecurityAddon),
     tags(
         (name = "Auth", description = "Sign up, sign in, password recovery, profile management"),
         (name = "Users", description = "Public user profiles"),
+        (name = "Cars", description = "Car listings: search, browse, host CRUD"),
+        (name = "Favorites", description = "User saved cars"),
     ),
 )]
 pub struct ApiDoc;

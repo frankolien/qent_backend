@@ -4,6 +4,17 @@ use uuid::Uuid;
 
 use crate::models::{Car, Claims};
 
+#[utoipa::path(
+    post,
+    path = "/api/favorites/{id}",
+    tag = "Favorites",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Car ID to favorite/unfavorite")),
+    responses(
+        (status = 200, description = "Toggled. Response: {\"favorited\": bool}"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn toggle_favorite(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -48,6 +59,16 @@ pub async fn toggle_favorite(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/favorites",
+    tag = "Favorites",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Cars favorited by the current user", body = Vec<Car>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_favorites(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -87,6 +108,17 @@ pub async fn get_favorites(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/favorites/{id}/check",
+    tag = "Favorites",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Car ID to check")),
+    responses(
+        (status = 200, description = "Whether the user has favorited this car. Response: {\"favorited\": bool}"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn check_favorite(
     req: HttpRequest,
     pool: web::Data<PgPool>,

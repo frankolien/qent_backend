@@ -10,6 +10,19 @@ use crate::models::{
     UserRole,
 };
 
+#[utoipa::path(
+    post,
+    path = "/api/cars",
+    tag = "Cars",
+    security(("bearer_auth" = [])),
+    request_body = CreateCarRequest,
+    responses(
+        (status = 201, description = "Listing created (status: pending_approval)", body = Car),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Only hosts can create listings"),
+    ),
+)]
 pub async fn create_car(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -78,6 +91,16 @@ pub async fn create_car(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/cars/{id}",
+    tag = "Cars",
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "Car details with rating + host info", body = Car),
+        (status = 404, description = "Car not found"),
+    ),
+)]
 pub async fn get_car(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let car_id = path.into_inner();
 
@@ -111,6 +134,15 @@ pub async fn get_car(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResp
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/cars/search",
+    tag = "Cars",
+    params(CarSearchQuery),
+    responses(
+        (status = 200, description = "Paginated list of matching cars", body = Vec<Car>),
+    ),
+)]
 pub async fn search_cars(
     pool: web::Data<PgPool>,
     query: web::Query<CarSearchQuery>,
@@ -203,6 +235,16 @@ pub async fn search_cars(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/cars/my-listings",
+    tag = "Cars",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Listings owned by the current host", body = Vec<Car>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_host_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
@@ -241,6 +283,20 @@ pub async fn get_host_cars(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRes
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/cars/{id}",
+    tag = "Cars",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Car ID")),
+    request_body = UpdateCarRequest,
+    responses(
+        (status = 200, description = "Updated car", body = Car),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not the car owner"),
+        (status = 404, description = "Car not found"),
+    ),
+)]
 pub async fn update_car(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -328,6 +384,18 @@ pub async fn update_car(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/cars/{id}/deactivate",
+    tag = "Cars",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "Car deactivated"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Car not found or not authorized"),
+    ),
+)]
 pub async fn deactivate_car(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -369,6 +437,17 @@ struct BookedDateRange {
     end_date: NaiveDate,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/cars/{id}/booked-dates",
+    tag = "Cars",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "Date ranges already booked for this car"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_booked_dates(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let car_id = path.into_inner();
 
@@ -392,6 +471,15 @@ pub async fn get_booked_dates(pool: web::Data<PgPool>, path: web::Path<Uuid>) ->
 /// GET /api/cars/homepage — Returns categorized car sections for the home feed.
 /// Accepts optional ?latitude=&longitude= for distance-based "Nearby" sorting.
 /// If the request is authenticated, "Recommended" is personalized based on booking history.
+#[utoipa::path(
+    get,
+    path = "/api/cars/homepage",
+    tag = "Cars",
+    params(HomepageQuery),
+    responses(
+        (status = 200, description = "Categorized homepage sections: recommended, best_cars, nearby, popular (each is a list of Car)"),
+    ),
+)]
 pub async fn get_homepage(
     req: HttpRequest,
     pool: web::Data<PgPool>,
