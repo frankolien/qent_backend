@@ -31,6 +31,22 @@ fn generate_refresh_token() -> String {
         .collect()
 }
 
+/// Sign a JWT for the given claims. Returns a 500 response on failure instead
+/// of panicking — encoding can fail if the secret bytes are malformed and we
+/// don't want a single bad config to kill the worker.
+fn sign_token(claims: &Claims, secret: &str) -> Result<String, HttpResponse> {
+    encode(
+        &Header::default(),
+        claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|e| {
+        log::error!("JWT encoding failed: {}", e);
+        HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": "Failed to issue session token"}))
+    })
+}
+
 #[utoipa::path(
     post,
     path = "/api/auth/signup",
@@ -105,12 +121,10 @@ pub async fn sign_up(
         exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
     };
 
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
-    )
-    .unwrap();
+    let token = match sign_token(&claims, &config.jwt_secret) {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
 
     // Generate refresh token
     let refresh = generate_refresh_token();
@@ -196,12 +210,10 @@ pub async fn sign_in(
         exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
     };
 
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
-    )
-    .unwrap();
+    let token = match sign_token(&claims, &config.jwt_secret) {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
 
     // Generate refresh token
     let refresh = generate_refresh_token();
@@ -255,12 +267,10 @@ pub async fn refresh_token(
         exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
     };
 
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
-    )
-    .unwrap();
+    let token = match sign_token(&claims, &config.jwt_secret) {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
 
     // Rotate refresh token
     let new_refresh = generate_refresh_token();
@@ -715,12 +725,10 @@ pub async fn sign_in_with_apple(
         exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
     };
 
-    let token = encode(
-        &Header::default(),
-        &jwt_claims,
-        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
-    )
-    .unwrap();
+    let token = match sign_token(&jwt_claims, &config.jwt_secret) {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
 
     let refresh = generate_refresh_token();
     let _ = sqlx::query("UPDATE users SET refresh_token = $1 WHERE id = $2")
@@ -876,12 +884,10 @@ pub async fn sign_in_with_google(
         exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
     };
 
-    let token = encode(
-        &Header::default(),
-        &jwt_claims,
-        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
-    )
-    .unwrap();
+    let token = match sign_token(&jwt_claims, &config.jwt_secret) {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
 
     let refresh = generate_refresh_token();
     let _ = sqlx::query("UPDATE users SET refresh_token = $1 WHERE id = $2")

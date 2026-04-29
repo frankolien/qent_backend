@@ -168,17 +168,18 @@ pub async fn search_cars(
         _ => "COALESCE(rs.avg_rating, 0.0) DESC, c.created_at DESC",
     };
 
-    // If sorting by distance, add a distance column
-    let distance_select = if query.sort_by.as_deref() == Some("distance")
-        && query.latitude.is_some()
-        && query.longitude.is_some()
-    {
-        format!(
+    // If sorting by distance, add a distance column. Use `if let` so a future
+    // refactor that drops the is_some() guard above can't panic the worker.
+    let distance_select = match (
+        query.sort_by.as_deref(),
+        query.latitude,
+        query.longitude,
+    ) {
+        (Some("distance"), Some(lat), Some(lng)) => format!(
             ", (6371 * acos(cos(radians({})) * cos(radians(c.latitude)) * cos(radians(c.longitude) - radians({})) + sin(radians({})) * sin(radians(c.latitude)))) as distance_km",
-            query.latitude.unwrap(), query.longitude.unwrap(), query.latitude.unwrap()
-        )
-    } else {
-        String::new()
+            lat, lng, lat
+        ),
+        _ => String::new(),
     };
 
     let sql = format!(
