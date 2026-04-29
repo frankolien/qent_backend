@@ -44,15 +44,40 @@ struct Disconnect {
 /// Send a message to a specific user
 #[derive(Message)]
 #[rtype(result = "()")]
-struct SendToUser {
+pub struct SendToUser {
+    pub user_id: Uuid,
+    pub message: WsMessage,
+}
+
+/// Mark which conversation a session is currently viewing — lets the server
+/// suppress push notifications for messages the user is already looking at.
+#[derive(Message)]
+#[rtype(result = "()")]
+struct SetActiveConversation {
     user_id: Uuid,
-    message: WsMessage,
+    addr: Addr<ChatWsSession>,
+    conversation_id: Option<Uuid>,
+}
+
+/// Query whether a user has the given conversation open in any session.
+#[derive(Message)]
+#[rtype(result = "bool")]
+pub struct IsConversationActive {
+    pub user_id: Uuid,
+    pub conversation_id: Uuid,
 }
 
 // ─── Connection Manager (Actor) ─────────────────────────────────────────────
 
+/// Per-session state: the recipient address + which conversation (if any)
+/// they currently have open in the foreground.
+struct SessionEntry {
+    addr: Addr<ChatWsSession>,
+    active_conversation: Option<Uuid>,
+}
+
 pub struct WsManager {
-    sessions: HashMap<Uuid, Vec<Addr<ChatWsSession>>>,
+    sessions: HashMap<Uuid, Vec<SessionEntry>>,
 }
 
 impl WsManager {
@@ -72,7 +97,10 @@ impl Handler<Connect> for WsManager {
 
     fn handle(&mut self, msg: Connect, _: &mut Context<Self>) {
         log::info!("WS: User {} connected", msg.user_id);
-        self.sessions.entry(msg.user_id).or_default().push(msg.addr);
+        self.sessions.entry(msg.user_id).or_default().push(SessionEntry {
+            addr: msg.addr,
+            active_conversation: None,
+        });
     }
 }
 
@@ -81,7 +109,7 @@ impl Handler<Disconnect> for WsManager {
 
     fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) {
         if let Some(sessions) = self.sessions.get_mut(&msg.user_id) {
-            sessions.retain(|a| a != &msg.addr);
+            sessions.retain(|s| s.addr != msg.addr);
             if sessions.is_empty() {
                 self.sessions.remove(&msg.user_id);
             }
@@ -95,14 +123,42 @@ impl Handler<SendToUser> for WsManager {
 
     fn handle(&mut self, msg: SendToUser, _: &mut Context<Self>) {
         if let Some(sessions) = self.sessions.get(&msg.user_id) {
-            let text = serde_json::to_string(&msg.message).unwrap_or_default();
-            for addr in sessions {
-                addr.do_send(WsMessage {
+            for entry in sessions {
+                entry.addr.do_send(WsMessage {
                     msg_type: msg.message.msg_type.clone(),
                     payload: msg.message.payload.clone(),
                 });
             }
         }
+    }
+}
+
+impl Handler<SetActiveConversation> for WsManager {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetActiveConversation, _: &mut Context<Self>) {
+        if let Some(sessions) = self.sessions.get_mut(&msg.user_id) {
+            for entry in sessions.iter_mut() {
+                if entry.addr == msg.addr {
+                    entry.active_conversation = msg.conversation_id;
+                }
+            }
+        }
+    }
+}
+
+impl Handler<IsConversationActive> for WsManager {
+    type Result = bool;
+
+    fn handle(&mut self, msg: IsConversationActive, _: &mut Context<Self>) -> bool {
+        self.sessions
+            .get(&msg.user_id)
+            .map(|sessions| {
+                sessions
+                    .iter()
+                    .any(|s| s.active_conversation == Some(msg.conversation_id))
+            })
+            .unwrap_or(false)
     }
 }
 
@@ -113,6 +169,7 @@ pub struct ChatWsSession {
     hb: Instant,
     manager: Addr<WsManager>,
     pool: web::Data<PgPool>,
+    push: web::Data<Option<crate::services::push::PushService>>,
 }
 
 impl ChatWsSession {
@@ -308,10 +365,24 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
                                 }
                             });
                         }
+                        "view_conversation" => {
+                            // Client says: I have this conversation open in the
+                            // foreground. Suppress push notifications for it
+                            // until they tell us otherwise.
+                            let conversation_id = incoming["conversation_id"]
+                                .as_str()
+                                .and_then(|s| Uuid::parse_str(s).ok());
+                            manager.do_send(SetActiveConversation {
+                                user_id,
+                                addr: ctx.address(),
+                                conversation_id,
+                            });
+                        }
                         "call_offer" | "call_answer" | "ice_candidate" | "call_hangup"
                         | "call_reject" => {
                             let target_id =
                                 incoming["target_id"].as_str().unwrap_or("").to_string();
+                            let push = self.push.clone();
 
                             actix::spawn(async move {
                                 if let Ok(target) = Uuid::parse_str(&target_id) {
@@ -322,9 +393,43 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
                                         user_id: target,
                                         message: WsMessage {
                                             msg_type: msg_type.clone(),
-                                            payload,
+                                            payload: payload.clone(),
                                         },
                                     });
+
+                                    // Wake the device with a push so the
+                                    // recipient sees the call even if the WS
+                                    // session is suspended (iOS background).
+                                    if msg_type == "call_offer" {
+                                        if let Some(push_svc) = push.get_ref().clone() {
+                                            // Fetch caller name for the push title
+                                            let caller_name = sqlx::query_scalar::<_, String>(
+                                                "SELECT full_name FROM users WHERE id = $1",
+                                            )
+                                            .bind(user_id)
+                                            .fetch_one(pool.get_ref())
+                                            .await
+                                            .unwrap_or_else(|_| "Someone".to_string());
+
+                                            let push_payload = serde_json::json!({
+                                                "type": "incoming_call",
+                                                "sender_id": user_id.to_string(),
+                                                "conversation_id": incoming["conversation_id"],
+                                            });
+                                            let pool = pool.get_ref().clone();
+                                            tokio::spawn(async move {
+                                                push_svc
+                                                    .send_to_user(
+                                                        &pool,
+                                                        target,
+                                                        &caller_name,
+                                                        "Incoming call…",
+                                                        push_payload,
+                                                    )
+                                                    .await;
+                                            });
+                                        }
+                                    }
                                 }
                             });
                         }
@@ -348,6 +453,7 @@ pub async fn ws_connect(
     stream: web::Payload,
     pool: web::Data<PgPool>,
     manager: web::Data<Addr<WsManager>>,
+    push: web::Data<Option<crate::services::push::PushService>>,
 ) -> Result<HttpResponse, Error> {
     // Extract token from query string: ?token=JWT
     let query = req.query_string();
@@ -386,6 +492,7 @@ pub async fn ws_connect(
             hb: Instant::now(),
             manager: manager.get_ref().clone(),
             pool,
+            push,
         },
         &req,
         stream,

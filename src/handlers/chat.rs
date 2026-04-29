@@ -5,8 +5,10 @@ use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::handlers::ws::{IsConversationActive, SendToUser, WsManager, WsMessage};
 use crate::models::Claims;
 use crate::services::push::PushService;
+use actix::Addr;
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct ConversationResponse {
@@ -375,6 +377,7 @@ pub async fn send_message(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     push: web::Data<Option<PushService>>,
+    ws_manager: web::Data<Addr<WsManager>>,
     path: web::Path<Uuid>,
     body: web::Json<SendMessageRequest>,
 ) -> HttpResponse {
@@ -425,6 +428,13 @@ pub async fn send_message(
             .json(serde_json::json!({"error": e.to_string()}));
     }
 
+    // Friendly preview for chat list / push body — never show raw URLs
+    let preview = match body.message_type.as_str() {
+        "image" => "📷 Photo".to_string(),
+        "voice" => "🎤 Voice message".to_string(),
+        _ => body.content.clone(),
+    };
+
     // Update conversation: last message text, timestamp, and increment OTHER user's unread count
     let _ = sqlx::query(
         r#"UPDATE conversations SET
@@ -435,7 +445,7 @@ pub async fn send_message(
         WHERE id = $1"#,
     )
     .bind(conversation_id)
-    .bind(&body.content)
+    .bind(&preview)
     .bind(user_id)
     .execute(pool.get_ref())
     .await;
@@ -456,31 +466,61 @@ pub async fn send_message(
 
     match result {
         Ok(message) => {
-            // Push notification to the recipient (the OTHER participant)
-            if let Some(push) = push.get_ref().clone() {
-                let recipient_id = sqlx::query_scalar::<_, Uuid>(
-                    r#"SELECT CASE WHEN renter_id = $1 THEN host_id ELSE renter_id END
-                       FROM conversations WHERE id = $2"#,
-                )
-                .bind(user_id)
-                .bind(conversation_id)
-                .fetch_optional(pool.get_ref())
-                .await
-                .ok()
-                .flatten();
+            let recipient_id = sqlx::query_scalar::<_, Uuid>(
+                r#"SELECT CASE WHEN renter_id = $1 THEN host_id ELSE renter_id END
+                   FROM conversations WHERE id = $2"#,
+            )
+            .bind(user_id)
+            .bind(conversation_id)
+            .fetch_optional(pool.get_ref())
+            .await
+            .ok()
+            .flatten();
 
-                if let Some(recipient_id) = recipient_id {
-                    let pool = pool.get_ref().clone();
-                    let title = message.sender_name.clone();
-                    let body_text = body.content.clone();
-                    let payload = serde_json::json!({
-                        "type": "chat_message",
-                        "conversation_id": conversation_id.to_string(),
-                        "message_id": message_id.to_string(),
-                    });
-                    tokio::spawn(async move {
-                        push.send_to_user(&pool, recipient_id, &title, &body_text, payload).await;
-                    });
+            if let Some(recipient_id) = recipient_id {
+                // 1. Real-time WS push — recipient sees the message instantly
+                //    if they're connected. This is the fast path.
+                let ws_payload = serde_json::json!({
+                    "id": message.id.to_string(),
+                    "conversation_id": conversation_id.to_string(),
+                    "sender_id": user_id.to_string(),
+                    "sender_name": message.sender_name,
+                    "content": body.content,
+                    "message_type": body.message_type,
+                    "created_at": message.created_at,
+                });
+                ws_manager.do_send(SendToUser {
+                    user_id: recipient_id,
+                    message: WsMessage {
+                        msg_type: "new_message".to_string(),
+                        payload: ws_payload,
+                    },
+                });
+
+                // 2. FCM push — only if recipient does NOT have this
+                //    conversation open in the foreground.
+                if let Some(push) = push.get_ref().clone() {
+                    let is_active = ws_manager
+                        .send(IsConversationActive {
+                            user_id: recipient_id,
+                            conversation_id,
+                        })
+                        .await
+                        .unwrap_or(false);
+
+                    if !is_active {
+                        let pool = pool.get_ref().clone();
+                        let title = message.sender_name.clone();
+                        let body_text = preview.clone();
+                        let payload = serde_json::json!({
+                            "type": "chat_message",
+                            "conversation_id": conversation_id.to_string(),
+                            "message_id": message_id.to_string(),
+                        });
+                        tokio::spawn(async move {
+                            push.send_to_user(&pool, recipient_id, &title, &body_text, payload).await;
+                        });
+                    }
                 }
             }
             HttpResponse::Created().json(message)
