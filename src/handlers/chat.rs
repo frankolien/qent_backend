@@ -39,6 +39,9 @@ pub struct MessageResponse {
     pub reply_to_id: Option<Uuid>,
     pub is_read: bool,
     pub created_at: NaiveDateTime,
+    /// Client-generated idempotency key. Echoed back so the sender can
+    /// match its optimistic local row to this confirmed server row.
+    pub client_id: Option<String>,
     // Joined
     pub sender_name: String,
 }
@@ -57,6 +60,11 @@ pub struct SendMessageRequest {
     pub content: String,
     pub message_type: String,
     pub reply_to_id: Option<Uuid>,
+    /// Client-generated UUID used as an idempotency key. If a row with the
+    /// same (conversation_id, sender_id, client_id) already exists, the
+    /// handler returns it without inserting a duplicate — important for
+    /// retry logic on flaky mobile networks.
+    pub client_id: Option<String>,
 }
 
 /// POST /api/chat/conversations — Get an existing conversation for (car, renter) or create one
@@ -341,6 +349,7 @@ pub async fn get_messages(
         r#"SELECT
             m.id, m.conversation_id, m.sender_id, m.content,
             m.message_type, m.reply_to_id, m.is_read, m.created_at,
+            m.client_id,
             u.full_name AS sender_name
         FROM messages m
         JOIN users u ON u.id = m.sender_id
@@ -406,13 +415,44 @@ pub async fn send_message(
             .json(serde_json::json!({"error": "Not a participant in this conversation"}));
     }
 
+    // Idempotency: if the client supplied a client_id and we've already
+    // stored a message with that key for this (conversation, sender),
+    // return the existing row. Lets retries on flaky networks be safe.
+    if let Some(cid) = body.client_id.as_deref() {
+        let existing = sqlx::query_as::<_, MessageResponse>(
+            r#"SELECT
+                m.id, m.conversation_id, m.sender_id, m.content,
+                m.message_type, m.reply_to_id, m.is_read, m.created_at,
+                m.client_id,
+                u.full_name AS sender_name
+            FROM messages m
+            JOIN users u ON u.id = m.sender_id
+            WHERE m.conversation_id = $1
+              AND m.sender_id = $2
+              AND m.client_id = $3"#,
+        )
+        .bind(conversation_id)
+        .bind(user_id)
+        .bind(cid)
+        .fetch_optional(pool.get_ref())
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(prior) = existing {
+            // No re-broadcast on WS / no extra push — the recipient already
+            // got those when the original insert went through.
+            return HttpResponse::Ok().json(prior);
+        }
+    }
+
     let message_id = Uuid::new_v4();
 
     // Insert the message
     let insert_result = sqlx::query(
         r#"INSERT INTO messages
-            (id, conversation_id, sender_id, content, message_type, reply_to_id, is_read, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, false, NOW())"#,
+            (id, conversation_id, sender_id, content, message_type, reply_to_id, is_read, created_at, client_id)
+        VALUES ($1, $2, $3, $4, $5, $6, false, NOW(), $7)"#,
     )
     .bind(message_id)
     .bind(conversation_id)
@@ -420,6 +460,7 @@ pub async fn send_message(
     .bind(&body.content)
     .bind(&body.message_type)
     .bind(body.reply_to_id)
+    .bind(body.client_id.as_deref())
     .execute(pool.get_ref())
     .await;
 
@@ -455,6 +496,7 @@ pub async fn send_message(
         r#"SELECT
             m.id, m.conversation_id, m.sender_id, m.content,
             m.message_type, m.reply_to_id, m.is_read, m.created_at,
+            m.client_id,
             u.full_name AS sender_name
         FROM messages m
         JOIN users u ON u.id = m.sender_id
@@ -488,6 +530,7 @@ pub async fn send_message(
                     "content": body.content,
                     "message_type": body.message_type,
                     "created_at": message.created_at,
+                    "client_id": body.client_id,
                 });
                 ws_manager.do_send(SendToUser {
                     user_id: recipient_id,
