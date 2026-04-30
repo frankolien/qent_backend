@@ -354,22 +354,32 @@ pub async fn get_messages(
     .execute(pool.get_ref())
     .await;
 
+    // LIMIT 200 caps the payload at the most recent 200 messages.
+    // Without this, a very chatty conversation eventually returns
+    // tens of MB of JSON which kills both Render bandwidth and the
+    // mobile cold-start render time. We sub-select the latest 200
+    // by created_at DESC then re-order ascending so the client gets
+    // the same chronological ordering it expects.
     let result = sqlx::query_as::<_, MessageResponse>(
-        r#"SELECT
-            m.id, m.conversation_id, m.sender_id, m.content,
-            m.message_type, m.reply_to_id, m.is_read, m.created_at,
-            m.client_id,
-            u.full_name AS sender_name,
-            r.content AS "reply_to_content",
-            r.sender_id AS "reply_to_sender_id",
-            ru.full_name AS "reply_to_sender_name",
-            r.message_type AS "reply_to_message_type"
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        LEFT JOIN messages r ON r.id = m.reply_to_id
-        LEFT JOIN users ru ON ru.id = r.sender_id
-        WHERE m.conversation_id = $1
-        ORDER BY m.created_at ASC"#,
+        r#"SELECT * FROM (
+            SELECT
+                m.id, m.conversation_id, m.sender_id, m.content,
+                m.message_type, m.reply_to_id, m.is_read, m.created_at,
+                m.client_id,
+                u.full_name AS sender_name,
+                r.content AS "reply_to_content",
+                r.sender_id AS "reply_to_sender_id",
+                ru.full_name AS "reply_to_sender_name",
+                r.message_type AS "reply_to_message_type"
+            FROM messages m
+            JOIN users u ON u.id = m.sender_id
+            LEFT JOIN messages r ON r.id = m.reply_to_id
+            LEFT JOIN users ru ON ru.id = r.sender_id
+            WHERE m.conversation_id = $1
+            ORDER BY m.created_at DESC
+            LIMIT 200
+        ) recent
+        ORDER BY recent.created_at ASC"#,
     )
     .bind(conversation_id)
     .fetch_all(pool.get_ref())
