@@ -400,19 +400,71 @@ pub async fn send_message(
     let conversation_id = path.into_inner();
     let user_id = claims.sub;
 
+    match process_chat_message(
+        pool.get_ref(),
+        push.get_ref(),
+        ws_manager.get_ref(),
+        user_id,
+        conversation_id,
+        body.into_inner(),
+    )
+    .await
+    {
+        Ok(ProcessedMessage::Created(msg)) => HttpResponse::Created().json(msg),
+        Ok(ProcessedMessage::Existing(msg)) => HttpResponse::Ok().json(msg),
+        Err(SendError::NotParticipant) => HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Not a participant in this conversation"})),
+        Err(SendError::Db(e)) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e}))
+        }
+    }
+}
+
+/// Outcome of [`process_chat_message`].
+pub enum ProcessedMessage {
+    /// New row inserted.
+    Created(MessageResponse),
+    /// Idempotency hit — same `client_id` was already stored.
+    Existing(MessageResponse),
+}
+
+#[derive(Debug)]
+pub enum SendError {
+    NotParticipant,
+    Db(String),
+}
+
+/// Shared send-message implementation used by both the HTTP route and
+/// the WebSocket `chat_message` frame.
+///
+/// Side effects:
+///  - INSERT into messages (or returns existing row if client_id matches)
+///  - UPDATE conversations.last_message_text + unread counts
+///  - WS broadcast `new_message` to BOTH the recipient AND the sender
+///    (the sender's other devices, plus the originating session — the
+///    sender's UI uses this echo to flip optimistic→confirmed without
+///    a refetch round-trip)
+///  - FCM push to recipient if they don't have the conversation open
+pub async fn process_chat_message(
+    pool: &PgPool,
+    push: &Option<PushService>,
+    ws_manager: &Addr<WsManager>,
+    user_id: Uuid,
+    conversation_id: Uuid,
+    body: SendMessageRequest,
+) -> Result<ProcessedMessage, SendError> {
     // Verify user is a participant
     let is_participant = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND (renter_id = $2 OR host_id = $2))",
     )
     .bind(conversation_id)
     .bind(user_id)
-    .fetch_one(pool.get_ref())
+    .fetch_one(pool)
     .await
     .unwrap_or(false);
 
     if !is_participant {
-        return HttpResponse::Forbidden()
-            .json(serde_json::json!({"error": "Not a participant in this conversation"}));
+        return Err(SendError::NotParticipant);
     }
 
     // Idempotency: if the client supplied a client_id and we've already
@@ -434,7 +486,7 @@ pub async fn send_message(
         .bind(conversation_id)
         .bind(user_id)
         .bind(cid)
-        .fetch_optional(pool.get_ref())
+        .fetch_optional(pool)
         .await
         .ok()
         .flatten();
@@ -442,14 +494,14 @@ pub async fn send_message(
         if let Some(prior) = existing {
             // No re-broadcast on WS / no extra push — the recipient already
             // got those when the original insert went through.
-            return HttpResponse::Ok().json(prior);
+            return Ok(ProcessedMessage::Existing(prior));
         }
     }
 
     let message_id = Uuid::new_v4();
 
     // Insert the message
-    let insert_result = sqlx::query(
+    sqlx::query(
         r#"INSERT INTO messages
             (id, conversation_id, sender_id, content, message_type, reply_to_id, is_read, created_at, client_id)
         VALUES ($1, $2, $3, $4, $5, $6, false, NOW(), $7)"#,
@@ -461,13 +513,9 @@ pub async fn send_message(
     .bind(&body.message_type)
     .bind(body.reply_to_id)
     .bind(body.client_id.as_deref())
-    .execute(pool.get_ref())
-    .await;
-
-    if let Err(e) = insert_result {
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()}));
-    }
+    .execute(pool)
+    .await
+    .map_err(|e| SendError::Db(e.to_string()))?;
 
     // Friendly preview for chat list / push body — never show raw URLs
     let preview = match body.message_type.as_str() {
@@ -488,11 +536,11 @@ pub async fn send_message(
     .bind(conversation_id)
     .bind(&preview)
     .bind(user_id)
-    .execute(pool.get_ref())
+    .execute(pool)
     .await;
 
-    // Fetch and return the new message
-    let result = sqlx::query_as::<_, MessageResponse>(
+    // Fetch the persisted row so we can return the canonical timestamp/sender_name.
+    let message = sqlx::query_as::<_, MessageResponse>(
         r#"SELECT
             m.id, m.conversation_id, m.sender_id, m.content,
             m.message_type, m.reply_to_id, m.is_read, m.created_at,
@@ -503,75 +551,82 @@ pub async fn send_message(
         WHERE m.id = $1"#,
     )
     .bind(message_id)
-    .fetch_one(pool.get_ref())
-    .await;
+    .fetch_one(pool)
+    .await
+    .map_err(|e| SendError::Db(e.to_string()))?;
 
-    match result {
-        Ok(message) => {
-            let recipient_id = sqlx::query_scalar::<_, Uuid>(
-                r#"SELECT CASE WHEN renter_id = $1 THEN host_id ELSE renter_id END
-                   FROM conversations WHERE id = $2"#,
-            )
-            .bind(user_id)
-            .bind(conversation_id)
-            .fetch_optional(pool.get_ref())
-            .await
-            .ok()
-            .flatten();
+    let recipient_id = sqlx::query_scalar::<_, Uuid>(
+        r#"SELECT CASE WHEN renter_id = $1 THEN host_id ELSE renter_id END
+           FROM conversations WHERE id = $2"#,
+    )
+    .bind(user_id)
+    .bind(conversation_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
 
-            if let Some(recipient_id) = recipient_id {
-                // 1. Real-time WS push — recipient sees the message instantly
-                //    if they're connected. This is the fast path.
-                let ws_payload = serde_json::json!({
-                    "id": message.id.to_string(),
-                    "conversation_id": conversation_id.to_string(),
-                    "sender_id": user_id.to_string(),
-                    "sender_name": message.sender_name,
-                    "content": body.content,
-                    "message_type": body.message_type,
-                    "created_at": message.created_at,
-                    "client_id": body.client_id,
-                });
-                ws_manager.do_send(SendToUser {
+    let ws_payload = serde_json::json!({
+        "id": message.id.to_string(),
+        "conversation_id": conversation_id.to_string(),
+        "sender_id": user_id.to_string(),
+        "sender_name": message.sender_name,
+        "content": body.content,
+        "message_type": body.message_type,
+        "created_at": message.created_at,
+        "client_id": body.client_id,
+    });
+
+    // Broadcast to the SENDER too — their UI matches by client_id and flips
+    // the optimistic bubble to "sent" without a second HTTP refetch. Other
+    // sender devices (multi-device) also pick up the new message.
+    ws_manager.do_send(SendToUser {
+        user_id,
+        message: WsMessage {
+            msg_type: "new_message".to_string(),
+            payload: ws_payload.clone(),
+        },
+    });
+
+    if let Some(recipient_id) = recipient_id {
+        // 1. Real-time WS push — recipient sees the message instantly
+        //    if they're connected. This is the fast path.
+        ws_manager.do_send(SendToUser {
+            user_id: recipient_id,
+            message: WsMessage {
+                msg_type: "new_message".to_string(),
+                payload: ws_payload,
+            },
+        });
+
+        // 2. FCM push — only if recipient does NOT have this conversation
+        //    open in the foreground.
+        if let Some(push) = push.clone() {
+            let is_active = ws_manager
+                .send(IsConversationActive {
                     user_id: recipient_id,
-                    message: WsMessage {
-                        msg_type: "new_message".to_string(),
-                        payload: ws_payload,
-                    },
+                    conversation_id,
+                })
+                .await
+                .unwrap_or(false);
+
+            if !is_active {
+                let pool = pool.clone();
+                let title = message.sender_name.clone();
+                let body_text = preview.clone();
+                let payload = serde_json::json!({
+                    "type": "chat_message",
+                    "conversation_id": conversation_id.to_string(),
+                    "message_id": message_id.to_string(),
                 });
-
-                // 2. FCM push — only if recipient does NOT have this
-                //    conversation open in the foreground.
-                if let Some(push) = push.get_ref().clone() {
-                    let is_active = ws_manager
-                        .send(IsConversationActive {
-                            user_id: recipient_id,
-                            conversation_id,
-                        })
-                        .await
-                        .unwrap_or(false);
-
-                    if !is_active {
-                        let pool = pool.get_ref().clone();
-                        let title = message.sender_name.clone();
-                        let body_text = preview.clone();
-                        let payload = serde_json::json!({
-                            "type": "chat_message",
-                            "conversation_id": conversation_id.to_string(),
-                            "message_id": message_id.to_string(),
-                        });
-                        tokio::spawn(async move {
-                            push.send_to_user(&pool, recipient_id, &title, &body_text, payload).await;
-                        });
-                    }
-                }
+                tokio::spawn(async move {
+                    push.send_to_user(&pool, recipient_id, &title, &body_text, payload).await;
+                });
             }
-            HttpResponse::Created().json(message)
-        }
-        Err(e) => {
-            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
         }
     }
+
+    Ok(ProcessedMessage::Created(message))
 }
 
 /// DELETE /api/chat/conversations/{id} - Delete a conversation and its messages

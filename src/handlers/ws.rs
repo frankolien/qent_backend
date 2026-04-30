@@ -239,6 +239,7 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
                 let user_id = self.user_id;
                 let manager = self.manager.clone();
                 let pool = self.pool.clone();
+                let push = self.push.clone();
 
                 // Parse incoming JSON message
                 if let Ok(incoming) = serde_json::from_str::<serde_json::Value>(&text) {
@@ -246,87 +247,55 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatWsSess
 
                     match msg_type.as_str() {
                         "chat_message" => {
-                            let conversation_id = incoming["conversation_id"]
+                            // Parse the same shape as the HTTP request body
+                            // and delegate to the shared processor — keeps
+                            // the WS path bug-for-bug consistent with the
+                            // HTTP path (idempotency, unread counts, push,
+                            // sender + recipient broadcast).
+                            let conv_id = incoming["conversation_id"]
                                 .as_str()
-                                .unwrap_or("")
-                                .to_string();
+                                .and_then(|s| Uuid::parse_str(s).ok());
                             let content = incoming["content"].as_str().unwrap_or("").to_string();
                             let message_type = incoming["message_type"]
                                 .as_str()
                                 .unwrap_or("text")
                                 .to_string();
+                            let reply_to_id = incoming["reply_to_id"]
+                                .as_str()
+                                .and_then(|s| Uuid::parse_str(s).ok());
+                            let client_id = incoming["client_id"]
+                                .as_str()
+                                .map(|s| s.to_string());
 
-                            // Save to DB and broadcast
-                            actix::spawn(async move {
-                                if let Ok(conv_id) = Uuid::parse_str(&conversation_id) {
-                                    let msg_id = Uuid::new_v4();
-                                    let result = sqlx::query(
-                                        r#"INSERT INTO messages (id, conversation_id, sender_id, content, message_type, is_read, created_at)
-                                        VALUES ($1, $2, $3, $4, $5, false, NOW())"#,
+                            if let Some(conv_id) = conv_id {
+                                let body = crate::handlers::chat::SendMessageRequest {
+                                    content,
+                                    message_type,
+                                    reply_to_id,
+                                    client_id: client_id.clone(),
+                                };
+                                let manager = manager.clone();
+                                let pool_inner = pool.get_ref().clone();
+                                let push_inner = push.get_ref().clone();
+                                actix::spawn(async move {
+                                    if let Err(e) = crate::handlers::chat::process_chat_message(
+                                        &pool_inner,
+                                        &push_inner,
+                                        &manager,
+                                        user_id,
+                                        conv_id,
+                                        body,
                                     )
-                                    .bind(msg_id)
-                                    .bind(conv_id)
-                                    .bind(user_id)
-                                    .bind(&content)
-                                    .bind(&message_type)
-                                    .execute(pool.get_ref())
-                                    .await;
-
-                                    if result.is_ok() {
-                                        // Update conversation timestamp
-                                        let _ = sqlx::query(
-                                            "UPDATE conversations SET last_message = $1, last_message_at = NOW(), updated_at = NOW() WHERE id = $2",
-                                        )
-                                        .bind(&content)
-                                        .bind(conv_id)
-                                        .execute(pool.get_ref())
-                                        .await;
-
-                                        // Get the other participant
-                                        let participants = sqlx::query_as::<_, (Uuid, Uuid)>(
-                                            "SELECT renter_id, host_id FROM conversations WHERE id = $1",
-                                        )
-                                        .bind(conv_id)
-                                        .fetch_optional(pool.get_ref())
-                                        .await;
-
-                                        if let Ok(Some((renter_id, host_id))) = participants {
-                                            let recipient = if user_id == renter_id {
-                                                host_id
-                                            } else {
-                                                renter_id
-                                            };
-
-                                            let payload = serde_json::json!({
-                                                "id": msg_id.to_string(),
-                                                "conversation_id": conversation_id,
-                                                "sender_id": user_id.to_string(),
-                                                "content": content,
-                                                "message_type": message_type,
-                                                "created_at": chrono::Utc::now().to_rfc3339(),
-                                            });
-
-                                            // Send to recipient
-                                            manager.do_send(SendToUser {
-                                                user_id: recipient,
-                                                message: WsMessage {
-                                                    msg_type: "new_message".to_string(),
-                                                    payload: payload.clone(),
-                                                },
-                                            });
-
-                                            // Echo back to sender (confirmation)
-                                            manager.do_send(SendToUser {
-                                                user_id,
-                                                message: WsMessage {
-                                                    msg_type: "message_sent".to_string(),
-                                                    payload,
-                                                },
-                                            });
-                                        }
+                                    .await
+                                    {
+                                        log::warn!(
+                                            "WS chat_message process failed for user {}: {:?}",
+                                            user_id,
+                                            e
+                                        );
                                     }
-                                }
-                            });
+                                });
+                            }
                         }
                         "typing" => {
                             let conversation_id = incoming["conversation_id"]
