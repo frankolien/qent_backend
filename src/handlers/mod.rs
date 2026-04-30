@@ -16,6 +16,7 @@ pub mod payments;
 pub mod protection_plans;
 pub mod reviews;
 pub mod stories;
+pub mod turn;
 pub mod upload;
 pub mod verification;
 pub mod waitlist;

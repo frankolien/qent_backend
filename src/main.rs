@@ -482,6 +482,11 @@ async fn main() -> std::io::Result<()> {
                                 "/chat/conversations/{id}",
                                 web::delete().to(handlers::chat::delete_conversation),
                             )
+                            // WebRTC: short-lived TURN credentials (Metered)
+                            .route(
+                                "/turn-credentials",
+                                web::get().to(handlers::turn::get_turn_credentials),
+                            )
                             // File upload
                             .route("/upload", web::post().to(handlers::upload::upload_file))
                             // Compliance & Account
