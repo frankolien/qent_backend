@@ -97,10 +97,35 @@ impl Handler<Connect> for WsManager {
 
     fn handle(&mut self, msg: Connect, _: &mut Context<Self>) {
         log::info!("WS: User {} connected", msg.user_id);
+        let was_offline = !self.sessions.contains_key(&msg.user_id);
+
+        // Snapshot the currently-online users BEFORE we register the
+        // new session, so the connecting client can seed its presence
+        // map without waiting for individual transition events.
+        let online_now: Vec<String> = self
+            .sessions
+            .keys()
+            .filter(|id| **id != msg.user_id)
+            .map(|id| id.to_string())
+            .collect();
+
         self.sessions.entry(msg.user_id).or_default().push(SessionEntry {
-            addr: msg.addr,
+            addr: msg.addr.clone(),
             active_conversation: None,
         });
+
+        // Send the snapshot to the just-connected session.
+        msg.addr.do_send(WsMessage {
+            msg_type: "presence_snapshot".to_string(),
+            payload: serde_json::json!({ "online_user_ids": online_now }),
+        });
+
+        // Broadcast the offline→online transition to everyone else
+        // (only on the FIRST session for this user — additional
+        // sessions don't change the user's presence).
+        if was_offline {
+            self.broadcast_presence(msg.user_id, true);
+        }
     }
 }
 
@@ -108,13 +133,38 @@ impl Handler<Disconnect> for WsManager {
     type Result = ();
 
     fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) {
+        let mut now_offline = false;
         if let Some(sessions) = self.sessions.get_mut(&msg.user_id) {
             sessions.retain(|s| s.addr != msg.addr);
             if sessions.is_empty() {
                 self.sessions.remove(&msg.user_id);
+                now_offline = true;
             }
         }
         log::info!("WS: User {} disconnected", msg.user_id);
+        if now_offline {
+            self.broadcast_presence(msg.user_id, false);
+        }
+    }
+}
+
+impl WsManager {
+    fn broadcast_presence(&self, user_id: Uuid, online: bool) {
+        let payload = serde_json::json!({
+            "user_id": user_id.to_string(),
+            "online": online,
+        });
+        for (peer_id, peer_sessions) in self.sessions.iter() {
+            if *peer_id == user_id {
+                continue;
+            }
+            for entry in peer_sessions {
+                entry.addr.do_send(WsMessage {
+                    msg_type: "presence_update".to_string(),
+                    payload: payload.clone(),
+                });
+            }
+        }
     }
 }
 

@@ -748,6 +748,7 @@ pub async fn delete_conversation(
 pub async fn mark_read(
     req: HttpRequest,
     pool: web::Data<PgPool>,
+    ws_manager: web::Data<Addr<WsManager>>,
     path: web::Path<Uuid>,
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
@@ -771,6 +772,47 @@ pub async fn mark_read(
     .bind(user_id)
     .execute(pool.get_ref())
     .await;
+
+    // Flip is_read=true on every incoming message in this conversation
+    // (i.e. messages NOT sent by the caller). Without this the sender
+    // never finds out their messages were read — bubbles stay on
+    // double-grey-tick forever.
+    let _ = sqlx::query(
+        "UPDATE messages SET is_read = true WHERE conversation_id = $1 AND sender_id != $2 AND is_read = false",
+    )
+    .bind(conversation_id)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await;
+
+    // Tell the OTHER participant that we just read their messages, so
+    // their bubbles can flip from double-grey to double-blue tick in
+    // real time. We look up the other party in this conversation and
+    // push a `message_read` WS frame to them.
+    if let Ok(Some(row)) = sqlx::query_as::<_, (Uuid, Uuid)>(
+        "SELECT renter_id, host_id FROM conversations WHERE id = $1",
+    )
+    .bind(conversation_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        let (renter_id, host_id) = row;
+        let other_party = if renter_id == user_id {
+            host_id
+        } else {
+            renter_id
+        };
+        ws_manager.do_send(SendToUser {
+            user_id: other_party,
+            message: WsMessage {
+                msg_type: "message_read".to_string(),
+                payload: serde_json::json!({
+                    "conversation_id": conversation_id.to_string(),
+                    "reader_id": user_id.to_string(),
+                }),
+            },
+        });
+    }
 
     HttpResponse::Ok().json(serde_json::json!({"message": "Marked as read"}))
 }
