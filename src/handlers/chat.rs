@@ -42,8 +42,17 @@ pub struct MessageResponse {
     /// Client-generated idempotency key. Echoed back so the sender can
     /// match its optimistic local row to this confirmed server row.
     pub client_id: Option<String>,
-    // Joined
+    // Joined fields
     pub sender_name: String,
+    /// Preview of the replied-to message — populated via a self-join
+    /// when `reply_to_id` is set. Lets the mobile render the reply
+    /// chip ("Replying to X: …") without a second round-trip. NULL
+    /// when this isn't a reply, or when the replied-to message was
+    /// deleted.
+    pub reply_to_content: Option<String>,
+    pub reply_to_sender_id: Option<Uuid>,
+    pub reply_to_sender_name: Option<String>,
+    pub reply_to_message_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -350,9 +359,15 @@ pub async fn get_messages(
             m.id, m.conversation_id, m.sender_id, m.content,
             m.message_type, m.reply_to_id, m.is_read, m.created_at,
             m.client_id,
-            u.full_name AS sender_name
+            u.full_name AS sender_name,
+            r.content AS "reply_to_content",
+            r.sender_id AS "reply_to_sender_id",
+            ru.full_name AS "reply_to_sender_name",
+            r.message_type AS "reply_to_message_type"
         FROM messages m
         JOIN users u ON u.id = m.sender_id
+        LEFT JOIN messages r ON r.id = m.reply_to_id
+        LEFT JOIN users ru ON ru.id = r.sender_id
         WHERE m.conversation_id = $1
         ORDER BY m.created_at ASC"#,
     )
@@ -476,9 +491,15 @@ pub async fn process_chat_message(
                 m.id, m.conversation_id, m.sender_id, m.content,
                 m.message_type, m.reply_to_id, m.is_read, m.created_at,
                 m.client_id,
-                u.full_name AS sender_name
+                u.full_name AS sender_name,
+                r.content AS "reply_to_content",
+                r.sender_id AS "reply_to_sender_id",
+                ru.full_name AS "reply_to_sender_name",
+                r.message_type AS "reply_to_message_type"
             FROM messages m
             JOIN users u ON u.id = m.sender_id
+            LEFT JOIN messages r ON r.id = m.reply_to_id
+            LEFT JOIN users ru ON ru.id = r.sender_id
             WHERE m.conversation_id = $1
               AND m.sender_id = $2
               AND m.client_id = $3"#,
@@ -545,9 +566,15 @@ pub async fn process_chat_message(
             m.id, m.conversation_id, m.sender_id, m.content,
             m.message_type, m.reply_to_id, m.is_read, m.created_at,
             m.client_id,
-            u.full_name AS sender_name
+            u.full_name AS sender_name,
+            r.content AS "reply_to_content",
+            r.sender_id AS "reply_to_sender_id",
+            ru.full_name AS "reply_to_sender_name",
+            r.message_type AS "reply_to_message_type"
         FROM messages m
         JOIN users u ON u.id = m.sender_id
+        LEFT JOIN messages r ON r.id = m.reply_to_id
+        LEFT JOIN users ru ON ru.id = r.sender_id
         WHERE m.id = $1"#,
     )
     .bind(message_id)
@@ -575,6 +602,11 @@ pub async fn process_chat_message(
         "message_type": body.message_type,
         "created_at": message.created_at,
         "client_id": body.client_id,
+        "reply_to_id": message.reply_to_id.map(|id| id.to_string()),
+        "reply_to_content": message.reply_to_content,
+        "reply_to_sender_id": message.reply_to_sender_id.map(|id| id.to_string()),
+        "reply_to_sender_name": message.reply_to_sender_name,
+        "reply_to_message_type": message.reply_to_message_type,
     });
 
     // Broadcast to the SENDER too — their UI matches by client_id and flips
