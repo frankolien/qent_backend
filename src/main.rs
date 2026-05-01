@@ -91,16 +91,32 @@ async fn auto_complete_bookings(pool: PgPool) {
     }
 }
 
-async fn auth_mw(
+async fn auth_mw<B>(
     req: ServiceRequest,
-    next: Next<impl MessageBody>,
-) -> Result<ServiceResponse<impl MessageBody>, Error> {
+    next: Next<B>,
+) -> Result<ServiceResponse<actix_web::body::EitherBody<B>>, Error>
+where
+    B: MessageBody + 'static,
+{
     let jwt_secret = req
         .app_data::<web::Data<AppConfig>>()
         .map(|c| c.jwt_secret.clone())
         .unwrap_or_default();
-    validate_token(&req, &jwt_secret)?;
-    next.call(req).await
+    // Don't propagate the auth failure as an actix `Error` — that
+    // short-circuits the chain and skips outer middlewares (notably
+    // actix-cors), so the 401 reaches the browser without an
+    // Access-Control-Allow-Origin header and the browser blocks it.
+    // Symptom in the admin dashboard: every request fails with
+    // "blocked by CORS policy". Build a real response instead so it
+    // flows back through cors and picks up the headers.
+    if let Err(e) = validate_token(&req, &jwt_secret) {
+        let body = serde_json::json!({"error": e.to_string()}).to_string();
+        let resp = actix_web::HttpResponse::Unauthorized()
+            .insert_header(("content-type", "application/json"))
+            .body(body);
+        return Ok(req.into_response(resp).map_into_right_body());
+    }
+    next.call(req).await.map(|r| r.map_into_left_body())
 }
 
 #[actix_web::main]
