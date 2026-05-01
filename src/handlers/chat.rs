@@ -555,13 +555,20 @@ pub async fn process_chat_message(
         _ => body.content.clone(),
     };
 
-    // Update conversation: last message text, timestamp, and increment OTHER user's unread count
+    // Update conversation: last message text, timestamp, and increment OTHER user's unread count.
+    // Also force-zero the SENDER's unread count — they're clearly
+    // caught up if they were able to reply, so any stale counter
+    // from before should clear. Without this, a sender who scrolls
+    // past prior messages without explicitly triggering a read
+    // (e.g. they opened the chat from a deep link straight to send)
+    // still shows a stale unread badge in the chats list after they
+    // send.
     let _ = sqlx::query(
         r#"UPDATE conversations SET
             last_message_text = $2,
             last_message_at = NOW(),
-            renter_unread_count = CASE WHEN renter_id != $3 THEN renter_unread_count + 1 ELSE renter_unread_count END,
-            host_unread_count = CASE WHEN host_id != $3 THEN host_unread_count + 1 ELSE host_unread_count END
+            renter_unread_count = CASE WHEN renter_id = $3 THEN 0 WHEN renter_id != $3 THEN renter_unread_count + 1 ELSE renter_unread_count END,
+            host_unread_count = CASE WHEN host_id = $3 THEN 0 WHEN host_id != $3 THEN host_unread_count + 1 ELSE host_unread_count END
         WHERE id = $1"#,
     )
     .bind(conversation_id)
@@ -631,6 +638,53 @@ pub async fn process_chat_message(
     });
 
     if let Some(recipient_id) = recipient_id {
+        // Probe whether the recipient currently has this chat open.
+        // We use the result to drive THREE things at once: the FCM
+        // suppression below, the auto-read flip just above the WS
+        // push, and the immediate `message_read` broadcast back to
+        // the sender so their bubble flips to double-blue tick.
+        let is_active = ws_manager
+            .send(IsConversationActive {
+                user_id: recipient_id,
+                conversation_id,
+            })
+            .await
+            .unwrap_or(false);
+
+        // If the recipient is staring at the chat right now, treat
+        // the message as already read: flip is_read=true, undo the
+        // unread-count bump we did above, and tell the sender. This
+        // is what makes WhatsApp's "blue ticks the instant they
+        // appear" feel work when both parties have the thread open.
+        if is_active {
+            let _ = sqlx::query(
+                "UPDATE messages SET is_read = true WHERE id = $1",
+            )
+            .bind(message_id)
+            .execute(pool)
+            .await;
+            let _ = sqlx::query(
+                r#"UPDATE conversations SET
+                    renter_unread_count = CASE WHEN renter_id = $2 THEN GREATEST(renter_unread_count - 1, 0) ELSE renter_unread_count END,
+                    host_unread_count = CASE WHEN host_id = $2 THEN GREATEST(host_unread_count - 1, 0) ELSE host_unread_count END
+                WHERE id = $1"#,
+            )
+            .bind(conversation_id)
+            .bind(recipient_id)
+            .execute(pool)
+            .await;
+            ws_manager.do_send(SendToUser {
+                user_id,
+                message: WsMessage {
+                    msg_type: "message_read".to_string(),
+                    payload: serde_json::json!({
+                        "conversation_id": conversation_id.to_string(),
+                        "reader_id": recipient_id.to_string(),
+                    }),
+                },
+            });
+        }
+
         // 1. Real-time WS push — recipient sees the message instantly
         //    if they're connected. This is the fast path.
         ws_manager.do_send(SendToUser {
@@ -643,16 +697,8 @@ pub async fn process_chat_message(
 
         // 2. FCM push — only if recipient does NOT have this conversation
         //    open in the foreground.
-        if let Some(push) = push.clone() {
-            let is_active = ws_manager
-                .send(IsConversationActive {
-                    user_id: recipient_id,
-                    conversation_id,
-                })
-                .await
-                .unwrap_or(false);
-
-            if !is_active {
+        if !is_active {
+            if let Some(push) = push.clone() {
                 let pool = pool.clone();
                 let title = message.sender_name.clone();
                 let body_text = preview.clone();
