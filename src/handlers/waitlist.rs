@@ -201,3 +201,50 @@ pub async fn waitlist_count(pool: web::Data<PgPool>) -> HttpResponse {
 
     HttpResponse::Ok().json(serde_json::json!({"count": count}))
 }
+
+/// GET /api/admin/waitlist — Full list of waitlist signups, newest first.
+/// Admin-only. Used by the admin dashboard so we can see who's waiting.
+#[utoipa::path(
+    get,
+    path = "/api/admin/waitlist",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Waitlist entries newest first"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
+pub async fn admin_list_waitlist(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+) -> HttpResponse {
+    if let Err(resp) = crate::handlers::admin::require_admin(&req) {
+        return resp;
+    }
+    let rows: Vec<(uuid::Uuid, String, Option<String>, Option<String>, String, Option<String>, Option<String>, chrono::NaiveDateTime)> =
+        sqlx::query_as(
+            r#"SELECT id, email, phone, name, role, city, referral_code, created_at
+               FROM waitlist
+               ORDER BY created_at DESC"#,
+        )
+        .fetch_all(pool.get_ref())
+        .await
+        .unwrap_or_default();
+    let json: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(id, email, phone, name, role, city, referral_code, created_at)| {
+            serde_json::json!({
+                "id": id.to_string(),
+                "email": email,
+                "phone": phone,
+                "name": name,
+                "role": role,
+                "city": city,
+                "referral_code": referral_code,
+                "created_at": created_at,
+            })
+        })
+        .collect();
+    HttpResponse::Ok().json(json)
+}

@@ -138,6 +138,7 @@
       <div class="nav-section-label">Actions</div>
       <div class="nav-item" onclick="showSection('pending', this)">&#9202; Pending Approvals</div>
       <div class="nav-item" onclick="showSection('withdrawals', this)">&#128176; Withdrawals</div>
+      <div class="nav-item" onclick="showSection('waitlist', this)">&#9989; Waitlist</div>
     </div>
     <div class="nav-section" style="margin-top:auto;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)">
       <div class="nav-item" onclick="logout()">&#128682; Logout</div>
@@ -201,6 +202,17 @@
     <div class="section" id="sec-withdrawals">
       <div class="header"><h1>Pending Withdrawals</h1></div>
       <div class="table-card"><div id="withdrawalsTableWrap" class="loading">Loading...</div></div>
+    </div>
+
+    <!-- Waitlist -->
+    <div class="section" id="sec-waitlist">
+      <div class="header">
+        <h1>Waitlist</h1>
+        <div style="display:flex;gap:8px">
+          <button onclick="exportWaitlistCsv()" style="padding:8px 14px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">Export CSV</button>
+        </div>
+      </div>
+      <div class="table-card"><div id="waitlistTableWrap" class="loading">Loading...</div></div>
     </div>
   </main>
 </div>
@@ -286,6 +298,7 @@ function showSection(id, el) {
   if (id === 'payments') loadPayments();
   if (id === 'pending') loadPending();
   if (id === 'withdrawals') loadWithdrawals();
+  if (id === 'waitlist') loadWaitlist();
 }
 
 // ─── Load all ───────────────────────────
@@ -478,6 +491,58 @@ async function loadWithdrawals() {
 
 async function approveWithdrawal(id) { await api(`/admin/withdrawals/${id}/approve`, 'POST'); toast('Withdrawal approved', '#2E7D32'); loadWithdrawals(); }
 async function rejectWithdrawal(id) { await api(`/admin/withdrawals/${id}/reject`, 'POST'); toast('Withdrawal rejected, funds returned', '#C62828'); loadWithdrawals(); }
+
+// ─── Waitlist ───────────────────────────
+let _waitlistCache = [];
+async function loadWaitlist() {
+  try {
+    const rows = await api('/admin/waitlist');
+    if (!Array.isArray(rows)) { document.getElementById('waitlistTableWrap').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+    _waitlistCache = rows;
+    if (!rows.length) { document.getElementById('waitlistTableWrap').innerHTML = '<div class="empty">No signups yet</div>'; return; }
+    let html = `<div style="padding:12px 16px;color:#6b7280;font-size:13px">${rows.length} total signups</div>`;
+    html += '<table><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>City</th><th>Joined</th>';
+    rows.forEach(r => {
+      const name = r.name || '—';
+      const phone = r.phone || '—';
+      const city = r.city || '—';
+      const role = (r.role || 'renter').toLowerCase();
+      const roleColor = role === 'host' ? 'badge-green' : role === 'both' ? 'badge-blue' : 'badge-gray';
+      html += `<tr>
+        <td>${escapeHtml(name)}</td>
+        <td><a href="mailto:${escapeHtml(r.email)}" style="color:#2563eb">${escapeHtml(r.email)}</a></td>
+        <td>${escapeHtml(phone)}</td>
+        <td><span class="badge ${roleColor}">${role}</span></td>
+        <td>${escapeHtml(city)}</td>
+        <td>${new Date(r.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+      </tr>`;
+    });
+    html += '</table>';
+    document.getElementById('waitlistTableWrap').innerHTML = html;
+  } catch(e) {
+    document.getElementById('waitlistTableWrap').innerHTML = '<div class="empty">Failed to load</div>';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function exportWaitlistCsv() {
+  if (!_waitlistCache.length) { toast('No data to export', '#C62828'); return; }
+  const cols = ['name','email','phone','role','city','referral_code','created_at'];
+  const esc = v => v == null ? '' : `"${String(v).replace(/"/g,'""')}"`;
+  const csv = [cols.join(',')]
+    .concat(_waitlistCache.map(r => cols.map(c => esc(r[c])).join(',')))
+    .join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `waitlist_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // ─── Utils ──────────────────────────────
 function badgeClass(role) {

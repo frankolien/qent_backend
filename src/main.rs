@@ -589,6 +589,10 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/admin/withdrawals/{id}/reject",
                                 web::post().to(handlers::admin::reject_withdrawal),
+                            )
+                            .route(
+                                "/admin/waitlist",
+                                web::get().to(handlers::waitlist::admin_list_waitlist),
                             ),
                     ),
             )

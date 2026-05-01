@@ -7,7 +7,7 @@ use crate::models::{
 };
 use crate::services::AppConfig;
 
-fn require_admin(req: &HttpRequest) -> Result<Claims, HttpResponse> {
+pub(crate) fn require_admin(req: &HttpRequest) -> Result<Claims, HttpResponse> {
     let claims = req.extensions().get::<Claims>().cloned().ok_or_else(|| {
         HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
     })?;
