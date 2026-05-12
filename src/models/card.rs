@@ -1,9 +1,10 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct SavedCard {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -21,7 +22,7 @@ pub struct SavedCard {
 }
 
 /// What we return to the client (no authorization_code exposed)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SavedCardPublic {
     pub id: Uuid,
     pub card_type: String,
@@ -52,7 +53,7 @@ impl From<SavedCard> for SavedCardPublic {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SetDefaultCardRequest {
     pub card_id: Uuid,
 }

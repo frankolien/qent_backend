@@ -3,8 +3,22 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::models::{Claims, CreateReviewRequest, Review, UserRatingSummary};
+use crate::models::{CarReview, Claims, CreateReviewRequest, Review, UserRatingSummary};
 
+/// POST /api/reviews — Create a review for a completed booking
+#[utoipa::path(
+    post,
+    path = "/api/reviews",
+    tag = "Reviews",
+    security(("bearer_auth" = [])),
+    request_body = CreateReviewRequest,
+    responses(
+        (status = 201, description = "Review created", body = Review),
+        (status = 400, description = "Validation error or booking not completed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Already reviewed this booking"),
+    ),
+)]
 pub async fn create_review(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -12,7 +26,9 @@ pub async fn create_review(
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     if let Err(e) = body.validate() {
@@ -68,14 +84,23 @@ pub async fn create_review(
 
     match result {
         Ok(review) => HttpResponse::Created().json(review),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
-pub async fn get_user_reviews(
-    pool: web::Data<PgPool>,
-    path: web::Path<Uuid>,
-) -> HttpResponse {
+/// GET /api/users/{id}/reviews — Reviews where this user is the reviewee
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}/reviews",
+    tag = "Reviews",
+    params(("id" = Uuid, Path, description = "Reviewee user ID")),
+    responses(
+        (status = 200, description = "Reviews newest first", body = Vec<Review>),
+    ),
+)]
+pub async fn get_user_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let user_id = path.into_inner();
 
     let reviews = sqlx::query_as::<_, Review>(
@@ -87,14 +112,66 @@ pub async fn get_user_reviews(
 
     match reviews {
         Ok(r) => HttpResponse::Ok().json(r),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
-pub async fn get_user_rating(
-    pool: web::Data<PgPool>,
-    path: web::Path<Uuid>,
-) -> HttpResponse {
+/// GET /api/cars/{id}/reviews — Renter reviews for a specific car (with reviewer profile)
+#[utoipa::path(
+    get,
+    path = "/api/cars/{id}/reviews",
+    tag = "Reviews",
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "Car reviews newest first", body = Vec<CarReview>),
+    ),
+)]
+pub async fn get_car_reviews(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
+    let car_id = path.into_inner();
+
+    let result = sqlx::query_as::<_, CarReview>(
+        r#"
+        SELECT
+            r.id,
+            r.booking_id,
+            r.reviewer_id,
+            COALESCE(NULLIF(TRIM(u.full_name), ''), u.email, 'User') AS reviewer_name,
+            u.profile_photo_url AS reviewer_photo_url,
+            r.rating,
+            r.comment,
+            r.created_at
+        FROM reviews r
+        JOIN bookings b ON b.id = r.booking_id
+        JOIN users u ON u.id = r.reviewer_id
+        WHERE b.car_id = $1 AND r.reviewer_id = b.renter_id
+        ORDER BY r.created_at DESC
+        "#,
+    )
+    .bind(car_id)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(reviews) => HttpResponse::Ok().json(reviews),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
+    }
+}
+
+/// GET /api/users/{id}/rating — Aggregated rating + review count for a user
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}/rating",
+    tag = "Reviews",
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, description = "Rating summary", body = UserRatingSummary),
+    ),
+)]
+pub async fn get_user_rating(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let user_id = path.into_inner();
 
     let avg = sqlx::query_scalar::<_, Option<f64>>(
@@ -104,12 +181,10 @@ pub async fn get_user_rating(
     .fetch_one(pool.get_ref())
     .await;
 
-    let count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM reviews WHERE reviewee_id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(pool.get_ref())
-    .await;
+    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM reviews WHERE reviewee_id = $1")
+        .bind(user_id)
+        .fetch_one(pool.get_ref())
+        .await;
 
     HttpResponse::Ok().json(UserRatingSummary {
         user_id,

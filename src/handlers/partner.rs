@@ -3,18 +3,40 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::models::{
-    Car, CarStatus, Claims, PartnerApplication, CreatePartnerApplicationRequest, HostDashboard,
-};
+use chrono::Utc;
+use jsonwebtoken::{encode, EncodingKey, Header};
 
+use crate::models::{
+    Car, CarStatus, Claims, CreatePartnerApplicationRequest, HostDashboard, PartnerApplication,
+    UserRole,
+};
+use crate::services::AppConfig;
+
+/// POST /api/partner/apply — Submit a host partner application; auto-creates a pending car listing and upgrades role to host
+#[utoipa::path(
+    post,
+    path = "/api/partner/apply",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    request_body = CreatePartnerApplicationRequest,
+    responses(
+        (status = 201, description = "Application submitted; returns application + new JWT with host role"),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Active application already exists"),
+    ),
+)]
 pub async fn apply(
     req: HttpRequest,
     pool: web::Data<PgPool>,
+    config: web::Data<AppConfig>,
     body: web::Json<CreatePartnerApplicationRequest>,
 ) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     if let Err(e) = body.validate() {
@@ -30,12 +52,17 @@ pub async fn apply(
     .await;
 
     if let Ok(true) = existing {
-        return HttpResponse::Conflict().json(serde_json::json!({"error": "You already have an active partnership application"}));
+        return HttpResponse::Conflict().json(
+            serde_json::json!({"error": "You already have an active partnership application"}),
+        );
     }
 
     let app_id = Uuid::new_v4();
     let car_description = body.car_description.clone().unwrap_or_default();
-    let fuel_type = body.fuel_type.clone().unwrap_or_else(|| "petrol".to_string());
+    let fuel_type = body
+        .fuel_type
+        .clone()
+        .unwrap_or_else(|| "petrol".to_string());
 
     // Create the partner application
     let result = sqlx::query_as::<_, PartnerApplication>(
@@ -112,20 +139,43 @@ pub async fn apply(
         .execute(pool.get_ref())
         .await;
 
+    // Issue a new JWT with the Host role so the app picks it up immediately
+    let new_claims = Claims {
+        sub: claims.sub,
+        role: UserRole::Host,
+        exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
+    };
+    let new_token = encode(
+        &Header::default(),
+        &new_claims,
+        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
+    )
+    .unwrap_or_default();
+
     HttpResponse::Created().json(serde_json::json!({
         "message": "Partnership application submitted successfully",
-        "application": application
+        "application": application,
+        "token": new_token
     }))
 }
 
-/// Activate the partner's most recent car listing (pendingapproval → active)
-pub async fn activate_car(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-) -> HttpResponse {
+/// POST /api/partner/activate-car — Activate the partner's most recent car listing (pendingapproval → active)
+#[utoipa::path(
+    post,
+    path = "/api/partner/activate-car",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "{ message, cars_activated }"),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
+pub async fn activate_car(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Activate all pending cars for this host and approve the application
@@ -149,17 +199,30 @@ pub async fn activate_car(
             "message": "Car listing activated successfully",
             "cars_activated": result.rows_affected()
         })),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
-pub async fn get_application(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-) -> HttpResponse {
+/// GET /api/partner/application — Caller's most recent partner application
+#[utoipa::path(
+    get,
+    path = "/api/partner/application",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Latest application", body = PartnerApplication),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "No application found"),
+    ),
+)]
+pub async fn get_application(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     let result = sqlx::query_as::<_, PartnerApplication>(
@@ -171,18 +234,32 @@ pub async fn get_application(
 
     match result {
         Ok(Some(app)) => HttpResponse::Ok().json(app),
-        Ok(None) => HttpResponse::NotFound().json(serde_json::json!({"error": "No application found"})),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Ok(None) => {
+            HttpResponse::NotFound().json(serde_json::json!({"error": "No application found"}))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
-pub async fn dashboard(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-) -> HttpResponse {
+/// GET /api/partner/dashboard — Aggregated host dashboard (earnings, listings, ratings)
+#[utoipa::path(
+    get,
+    path = "/api/partner/dashboard",
+    tag = "Partner",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Host dashboard summary", body = HostDashboard),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
+pub async fn dashboard(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
-        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"})),
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
+        }
     };
 
     // Total earnings from completed bookings where user is the host

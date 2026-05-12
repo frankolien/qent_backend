@@ -1,5 +1,5 @@
-use actix_web::{dev::ServiceRequest, Error, HttpMessage};
 use actix_web::error::ErrorUnauthorized;
+use actix_web::{dev::ServiceRequest, Error, HttpMessage};
 use jsonwebtoken::{decode, DecodingKey, Validation};
 
 use crate::models::Claims;
@@ -25,10 +25,7 @@ pub fn extract_claims(req: &ServiceRequest, jwt_secret: &str) -> Result<Claims, 
     Ok(token_data.claims)
 }
 
-pub fn validate_token(
-    req: &ServiceRequest,
-    jwt_secret: &str,
-) -> Result<(), Error> {
+pub fn validate_token(req: &ServiceRequest, jwt_secret: &str) -> Result<(), Error> {
     let claims = extract_claims(req, jwt_secret)?;
     req.extensions_mut().insert(claims);
     Ok(())

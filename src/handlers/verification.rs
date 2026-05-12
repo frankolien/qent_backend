@@ -2,15 +2,16 @@ use actix_web::{web, HttpResponse};
 use chrono::{Duration, Utc};
 use rand::Rng;
 use sqlx::PgPool;
+use utoipa::ToSchema;
 
 use crate::services::AppConfig;
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, ToSchema)]
 pub struct SendCodeRequest {
     pub email: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, ToSchema)]
 pub struct VerifyCodeRequest {
     pub email: String,
     pub code: String,
@@ -23,7 +24,18 @@ fn generate_code() -> String {
     code.to_string()
 }
 
-/// Send verification code to email via Resend, store in DB
+/// POST /api/auth/send-code — Email a 4-digit verification code (5-min expiry)
+#[utoipa::path(
+    post,
+    path = "/api/auth/send-code",
+    tag = "Auth",
+    request_body = SendCodeRequest,
+    responses(
+        (status = 200, description = "{ message, expires_in_seconds }"),
+        (status = 400, description = "Invalid email"),
+        (status = 500, description = "Failed to send email"),
+    ),
+)]
 pub async fn send_code(
     pool: web::Data<PgPool>,
     config: web::Data<AppConfig>,
@@ -46,14 +58,13 @@ pub async fn send_code(
         .await;
 
     // Insert new code
-    let result = sqlx::query(
-        "INSERT INTO verification_codes (email, code, expires_at) VALUES ($1, $2, $3)",
-    )
-    .bind(&email)
-    .bind(&code)
-    .bind(expires_at)
-    .execute(pool.get_ref())
-    .await;
+    let result =
+        sqlx::query("INSERT INTO verification_codes (email, code, expires_at) VALUES ($1, $2, $3)")
+            .bind(&email)
+            .bind(&code)
+            .bind(expires_at)
+            .execute(pool.get_ref())
+            .await;
 
     if result.is_err() {
         return HttpResponse::InternalServerError()
@@ -85,7 +96,17 @@ pub async fn send_code(
     }
 }
 
-/// Verify the code entered by the user
+/// POST /api/auth/verify-code — Verify the 4-digit code emailed to the user
+#[utoipa::path(
+    post,
+    path = "/api/auth/verify-code",
+    tag = "Auth",
+    request_body = VerifyCodeRequest,
+    responses(
+        (status = 200, description = "{ message, verified }"),
+        (status = 400, description = "Code not found, expired, used, or wrong"),
+    ),
+)]
 pub async fn verify_code(
     pool: web::Data<PgPool>,
     body: web::Json<VerifyCodeRequest>,
@@ -108,8 +129,7 @@ pub async fn verify_code(
     };
 
     if row.verified {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({"error": "Code already used"}));
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": "Code already used"}));
     }
 
     if Utc::now() > row.expires_at {
@@ -118,8 +138,9 @@ pub async fn verify_code(
             .bind(&email)
             .execute(pool.get_ref())
             .await;
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({"error": "Verification code expired. Please request a new one."}));
+        return HttpResponse::BadRequest().json(
+            serde_json::json!({"error": "Verification code expired. Please request a new one."}),
+        );
     }
 
     if row.code != body.code.trim() {

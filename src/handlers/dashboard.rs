@@ -1,11 +1,12 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use serde::Serialize;
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::Claims;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct HostStats {
     pub total_listings: i64,
     pub active_listings: i64,
@@ -17,7 +18,7 @@ pub struct HostStats {
     pub wallet_balance: f64,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct ListingSummary {
     pub id: Uuid,
     pub make: String,
@@ -32,25 +33,33 @@ pub struct ListingSummary {
 }
 
 /// GET /api/dashboard/stats - Host dashboard statistics
+#[utoipa::path(
+    get,
+    path = "/api/dashboard/stats",
+    tag = "Dashboard",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Stats: listings/views/bookings/earnings/rating/wallet", body = HostStats),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_host_stats(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
         None => {
-            return HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Unauthorized"}))
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
         }
     };
 
     let host_id = claims.sub;
 
     // Fetch all stats in parallel queries
-    let total_listings = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM cars WHERE host_id = $1",
-    )
-    .bind(host_id)
-    .fetch_one(pool.get_ref())
-    .await
-    .unwrap_or(0);
+    let total_listings =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cars WHERE host_id = $1")
+            .bind(host_id)
+            .fetch_one(pool.get_ref())
+            .await
+            .unwrap_or(0);
 
     let active_listings = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM cars WHERE host_id = $1 AND status = 'active'",
@@ -133,13 +142,22 @@ pub async fn get_host_stats(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRe
     })
 }
 
-/// GET /api/dashboard/listings - Host's car listings with stats
+/// GET /api/dashboard/listings - Host's car listings with per-listing stats
+#[utoipa::path(
+    get,
+    path = "/api/dashboard/listings",
+    tag = "Dashboard",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Listings with views/rating/trip count", body = Vec<ListingSummary>),
+        (status = 401, description = "Unauthorized"),
+    ),
+)]
 pub async fn get_host_listings(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     let claims = match req.extensions().get::<Claims>().cloned() {
         Some(c) => c,
         None => {
-            return HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Unauthorized"}))
+            return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Unauthorized"}))
         }
     };
 
@@ -170,12 +188,22 @@ pub async fn get_host_listings(req: HttpRequest, pool: web::Data<PgPool>) -> Htt
 
     match result {
         Ok(listings) => HttpResponse::Ok().json(listings),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
-/// POST /api/cars/{id}/view - Increment view count
+/// POST /api/cars/{id}/view - Increment view count for a car listing
+#[utoipa::path(
+    post,
+    path = "/api/cars/{id}/view",
+    tag = "Cars",
+    params(("id" = Uuid, Path, description = "Car ID")),
+    responses(
+        (status = 200, description = "View recorded"),
+    ),
+)]
 pub async fn increment_view(pool: web::Data<PgPool>, path: web::Path<Uuid>) -> HttpResponse {
     let car_id = path.into_inner();
 

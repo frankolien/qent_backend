@@ -1,10 +1,11 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq, ToSchema)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
 pub enum UserRole {
     Renter,
@@ -12,7 +13,7 @@ pub enum UserRole {
     Admin,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq, ToSchema)]
 #[sqlx(type_name = "verification_status", rename_all = "lowercase")]
 pub enum VerificationStatus {
     Pending,
@@ -20,12 +21,12 @@ pub enum VerificationStatus {
     Rejected,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
     pub phone: Option<String>,
-    pub password_hash: String,
+    pub password_hash: Option<String>,
     pub full_name: String,
     pub role: UserRole,
     pub profile_photo_url: Option<String>,
@@ -35,11 +36,13 @@ pub struct User {
     pub wallet_balance: f64,
     pub is_active: bool,
     pub country: String,
+    pub apple_id: Option<String>,
+    pub google_id: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct SignUpRequest {
     #[validate(email)]
     pub email: String,
@@ -52,19 +55,19 @@ pub struct SignUpRequest {
     pub country: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SignInRequest {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthResponse {
     pub token: String,
     pub user: UserPublic,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserPublic {
     pub id: Uuid,
     pub email: String,
@@ -97,13 +100,13 @@ impl From<User> for UserPublic {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct VerifyIdentityRequest {
     pub drivers_license_url: String,
     pub id_card_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateProfileRequest {
     #[validate(length(min = 2))]
     pub full_name: Option<String>,
@@ -116,4 +119,41 @@ pub struct Claims {
     pub sub: Uuid,
     pub role: UserRole,
     pub exp: usize,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthResponseWithRefresh {
+    pub token: String,
+    pub refresh_token: String,
+    pub user: UserPublic,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RefreshTokenRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AppleSignInRequest {
+    pub identity_token: String,
+    pub full_name: Option<String>,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct GoogleSignInRequest {
+    pub id_token: String,
+    pub full_name: Option<String>,
+    pub email: Option<String>,
 }

@@ -1,10 +1,11 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PartnerApplicationStatus {
     Pending,
@@ -22,7 +23,7 @@ impl std::fmt::Display for PartnerApplicationStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct PartnerApplication {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -43,7 +44,7 @@ pub struct PartnerApplication {
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreatePartnerApplicationRequest {
     #[validate(length(min = 2))]
     pub full_name: String,
@@ -71,7 +72,7 @@ pub struct CreatePartnerApplicationRequest {
     pub longitude: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct HostDashboard {
     pub total_earnings: f64,
     pub active_listings: i64,
