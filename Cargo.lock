@@ -2263,6 +2263,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlx",
+ "thiserror",
  "tokio",
  "utoipa",
  "utoipa-swagger-ui",

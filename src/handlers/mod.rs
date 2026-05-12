@@ -12,6 +12,7 @@ pub mod favorites;
 pub mod health;
 pub mod notifications;
 pub mod partner;
+pub mod partner_v2;
 pub mod payments;
 pub mod protection_plans;
 pub mod reviews;

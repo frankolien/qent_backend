@@ -1,6 +1,7 @@
 pub mod apple_auth;
 pub mod email;
 pub mod google_auth;
+pub mod prembly;
 pub mod push;
 
 use serde::Deserialize;
@@ -16,6 +17,8 @@ pub struct AppConfig {
     pub port: u16,
     pub apple_bundle_id: String,
     pub google_client_ids: Vec<String>,
+    pub prembly_secret_key: String,
+    pub prembly_base_url: String,
 }
 
 impl AppConfig {
@@ -44,6 +47,9 @@ impl AppConfig {
                 .unwrap_or(8080),
             apple_bundle_id: std::env::var("APPLE_BUNDLE_ID").unwrap_or_default(),
             google_client_ids,
+            prembly_secret_key: std::env::var("PREMBLY_SECRET_KEY").unwrap_or_default(),
+            prembly_base_url: std::env::var("PREMBLY_BASE_URL")
+                .unwrap_or_else(|_| "https://api.prembly.com".to_string()),
         }
     }
 }

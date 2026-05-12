@@ -5,3 +5,7 @@
 /secrets/
 *.p8
 *-firebase-adminsdk-*.json
+
+# Local Netlify folder
+.netlify
+.DS_Store

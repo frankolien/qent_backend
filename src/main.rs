@@ -466,6 +466,52 @@ async fn main() -> std::io::Result<()> {
                                 "/partner/activate-car",
                                 web::post().to(handlers::partner::activate_car),
                             )
+                            // Partner v2 (Editorial onboarding) — coexists
+                            // with the legacy single-shot /partner/apply.
+                            .route(
+                                "/partner/profile",
+                                web::get().to(handlers::partner_v2::get_profile),
+                            )
+                            .route(
+                                "/partner/profile",
+                                web::post().to(handlers::partner_v2::upsert_profile),
+                            )
+                            .route(
+                                "/partner/listings",
+                                web::get().to(handlers::partner_v2::list_listings),
+                            )
+                            .route(
+                                "/partner/listings",
+                                web::post().to(handlers::partner_v2::create_listing),
+                            )
+                            .route(
+                                "/partner/listings/draft",
+                                web::get().to(handlers::partner_v2::get_draft_listing),
+                            )
+                            .route(
+                                "/partner/listings/{id}/photos",
+                                web::put().to(handlers::partner_v2::update_listing_photos),
+                            )
+                            .route(
+                                "/partner/listings/{id}/docs",
+                                web::post().to(handlers::partner_v2::submit_listing_docs),
+                            )
+                            .route(
+                                "/partner/listings/{id}/owner-consent",
+                                web::post().to(handlers::partner_v2::submit_owner_consent),
+                            )
+                            .route(
+                                "/partner/identity/scan",
+                                web::post().to(handlers::partner_v2::submit_identity_scan),
+                            )
+                            .route(
+                                "/partner/listings/{id}/submit",
+                                web::post().to(handlers::partner_v2::submit_listing),
+                            )
+                            .route(
+                                "/partner/email/mark-verified",
+                                web::post().to(handlers::partner_v2::mark_email_verified),
+                            )
                             // Stories
                             .route("/stories", web::get().to(handlers::stories::get_stories))
                             .route("/stories", web::post().to(handlers::stories::create_story))
