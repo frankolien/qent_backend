@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS partner_profiles (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_partner_profiles_status ON partner_profiles(identity_status);
+CREATE INDEX IF NOT EXISTS idx_partner_profiles_status ON partner_profiles(identity_status);
 
 -- ─── partner_listings ──────────────────────────────────────────────────────
 -- One per car the host wants to list. Vehicle-specific KYC (FRSC plate
@@ -128,13 +128,13 @@ CREATE TABLE IF NOT EXISTS partner_listings (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_partner_listings_profile ON partner_listings(profile_id);
-CREATE INDEX idx_partner_listings_user ON partner_listings(user_id);
-CREATE INDEX idx_partner_listings_status ON partner_listings(listing_status);
+CREATE INDEX IF NOT EXISTS idx_partner_listings_profile ON partner_listings(profile_id);
+CREATE INDEX IF NOT EXISTS idx_partner_listings_user ON partner_listings(user_id);
+CREATE INDEX IF NOT EXISTS idx_partner_listings_status ON partner_listings(listing_status);
 -- Plate is meant to be globally unique across LIVE listings, but during
 -- onboarding two drafts could collide. Enforce uniqueness only on rows
 -- past the draft stage so a host can re-edit without tripping the index.
-CREATE UNIQUE INDEX idx_partner_listings_plate_active
+CREATE UNIQUE INDEX IF NOT EXISTS idx_partner_listings_plate_active
     ON partner_listings(plate_number)
     WHERE listing_status IN ('submitted', 'in_review', 'approved');
 
