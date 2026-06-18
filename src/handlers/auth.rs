@@ -147,10 +147,11 @@ pub async fn sign_up(
             verification_status: VerificationStatus::Pending,
             wallet_balance: 0.0,
             is_active: true,
-            country: body
-                .country
-                .clone()
-                .unwrap_or_else(|| "Nigeria".to_string()),
+            country: Some(
+                body.country
+                    .clone()
+                    .unwrap_or_else(|| "Nigeria".to_string()),
+            ),
             created_at: now,
         },
     })

@@ -17,6 +17,8 @@ mod services;
 use crate::middleware::auth::validate_token;
 use crate::openapi::ApiDoc;
 use crate::services::push::PushService;
+use crate::services::sumsub::SumsubClient;
+use crate::services::wallet::WalletClient;
 use crate::services::AppConfig;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -175,6 +177,19 @@ async fn main() -> std::io::Result<()> {
     // Start WebSocket connection manager
     let ws_manager = handlers::ws::WsManager::new().start();
 
+    // V2 clients — built once and shared. Both tolerate missing env
+    // (the underlying methods return NotConfigured).
+    let wallet_client = WalletClient::new(
+        config.privy_app_id.clone(),
+        config.privy_app_secret.clone(),
+        config.privy_jwks_url.clone(),
+    );
+    let sumsub_client = SumsubClient::new(
+        config.sumsub_app_token.clone(),
+        config.sumsub_secret_key.clone(),
+        config.sumsub_webhook_secret.clone(),
+    );
+
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000")
@@ -206,6 +221,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(ws_manager.clone()))
             .app_data(web::Data::new(push_service.clone()))
+            .app_data(web::Data::new(wallet_client.clone()))
+            .app_data(web::Data::new(sumsub_client.clone()))
             .route("/health", web::get().to(handlers::health::health_check))
             .route("/ws", web::get().to(handlers::ws::ws_connect))
             .service(actix_files::Files::new("/uploads", "uploads").show_files_listing())
@@ -247,7 +264,21 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/verify-code",
                                 web::post().to(handlers::verification::verify_code),
+                            )
+                            .route(
+                                "/privy",
+                                web::post().to(handlers::auth_v2::exchange_privy),
                             ),
+                    )
+                    // V2 country picker — public list, authed set
+                    .route(
+                        "/countries",
+                        web::get().to(handlers::countries::list_countries),
+                    )
+                    // V2 cars search — public (browse without auth)
+                    .route(
+                        "/v2/cars/search",
+                        web::get().to(handlers::cars_v2::search),
                     )
                     // Cars - public
                     .route("/cars/search", web::get().to(handlers::cars::search_cars))
@@ -328,6 +359,14 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/profile/verify-identity",
                                 web::post().to(handlers::auth::verify_identity),
+                            )
+                            .route(
+                                "/users/me/country",
+                                web::post().to(handlers::countries::set_my_country),
+                            )
+                            .route(
+                                "/kyc/access-token",
+                                web::post().to(handlers::kyc::access_token),
                             )
                             // Cars - host
                             .route("/cars", web::post().to(handlers::cars::create_car))

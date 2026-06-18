@@ -1,6 +1,10 @@
 pub mod admin;
 pub mod auth;
+pub mod auth_v2;
 pub mod bookings;
+pub mod cars_v2;
+pub mod countries;
+pub mod kyc;
 pub mod cards;
 pub mod cars;
 pub mod chat;

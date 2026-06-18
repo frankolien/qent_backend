@@ -35,7 +35,7 @@ pub struct User {
     pub verification_status: VerificationStatus,
     pub wallet_balance: f64,
     pub is_active: bool,
-    pub country: String,
+    pub country: Option<String>,
     pub apple_id: Option<String>,
     pub google_id: Option<String>,
     pub created_at: NaiveDateTime,
@@ -78,7 +78,7 @@ pub struct UserPublic {
     pub verification_status: VerificationStatus,
     pub wallet_balance: f64,
     pub is_active: bool,
-    pub country: String,
+    pub country: Option<String>,
     pub created_at: NaiveDateTime,
 }
 
