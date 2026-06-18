@@ -13,8 +13,9 @@ use validator::Validate;
 
 use crate::models::{
     Claims, CreatePartnerListingRequest, PartnerListing, PartnerProfile,
-    SubmitOwnerConsentRequest, SubmitPartnerListingDocsRequest,
-    UpdatePartnerListingPhotosRequest, UpsertPartnerProfileRequest,
+    SetListingPricingRequest, SubmitOwnerConsentRequest,
+    SubmitPartnerListingDocsRequest, UpdatePartnerListingPhotosRequest,
+    UpsertPartnerProfileRequest,
 };
 use crate::services::prembly::PremblyClient;
 use crate::services::AppConfig;
@@ -868,15 +869,86 @@ pub struct SubmitIdentityScanRequest {
     pub selfie_url: String,
 }
 
-/// POST /api/partner/listings/{id}/submit — Step 06 (Success).
-///
-/// Flips `listing_status` from `draft` → `submitted`, which makes the
-/// row visible to the admin review queue. Validates every prerequisite
-/// before stamping the status so we never end up with a "submitted"
-/// listing that's half-empty.
-///
-/// Returns the listing including the auto-minted `application_ref`
-/// (e.g. `QP-29841`) so the success screen can display it.
+/// POST /api/partner/listings/{id}/pricing — capture price + location before submit.
+#[utoipa::path(
+    post,
+    path = "/api/partner/listings/{id}/pricing",
+    tag = "Partner v2",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Listing ID")),
+    request_body = SetListingPricingRequest,
+    responses(
+        (status = 200, description = "Pricing saved", body = PartnerListing),
+        (status = 400, description = "Validation failed"),
+        (status = 403, description = "Not your listing"),
+        (status = 404, description = "Listing not found"),
+    ),
+)]
+pub async fn set_listing_pricing(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+    body: web::Json<SetListingPricingRequest>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => {
+            return HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Unauthorized"}))
+        }
+    };
+    if let Err(e) = body.validate() {
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": e.to_string()}));
+    }
+
+    let listing_id = path.into_inner();
+
+    let owner = sqlx::query_scalar::<_, Uuid>(
+        "SELECT user_id FROM partner_listings WHERE id = $1",
+    )
+    .bind(listing_id)
+    .fetch_optional(pool.get_ref())
+    .await;
+    match owner {
+        Ok(Some(uid)) if uid == claims.sub => {}
+        Ok(Some(_)) => {
+            return HttpResponse::Forbidden()
+                .json(serde_json::json!({"error": "Not your listing"}))
+        }
+        Ok(None) => {
+            return HttpResponse::NotFound()
+                .json(serde_json::json!({"error": "Listing not found"}))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
+    }
+
+    let updated = sqlx::query_as::<_, PartnerListing>(
+        "UPDATE partner_listings
+         SET price_per_day = $2, location = $3, latitude = $4, longitude = $5,
+             description = $6, updated_at = NOW()
+         WHERE id = $1
+         RETURNING *",
+    )
+    .bind(listing_id)
+    .bind(body.price_per_day)
+    .bind(&body.location)
+    .bind(body.latitude)
+    .bind(body.longitude)
+    .bind(body.description.clone())
+    .fetch_one(pool.get_ref())
+    .await;
+
+    match updated {
+        Ok(l) => HttpResponse::Ok().json(l),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// POST /api/partner/listings/{id}/submit — flip draft → submitted for admin review.
 #[utoipa::path(
     post,
     path = "/api/partner/listings/{id}/submit",
@@ -989,6 +1061,14 @@ pub async fn submit_listing(
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": "Verify your contract email first",
             "field": "contract_email_verified",
+        }));
+    }
+    if listing.price_per_day.is_none()
+        || listing.location.as_deref().unwrap_or_default().is_empty()
+    {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Set your price and location first",
+            "field": "pricing",
         }));
     }
 

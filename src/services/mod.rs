@@ -1,8 +1,12 @@
 pub mod apple_auth;
+pub mod chain;
 pub mod email;
 pub mod google_auth;
+pub mod onramp;
 pub mod prembly;
 pub mod push;
+pub mod sumsub;
+pub mod wallet;
 
 use serde::Deserialize;
 
@@ -19,6 +23,22 @@ pub struct AppConfig {
     pub google_client_ids: Vec<String>,
     pub prembly_secret_key: String,
     pub prembly_base_url: String,
+
+    // V2 fields (§3.3, §13.7).
+    pub privy_app_id: String,
+    pub privy_app_secret: String,
+    pub privy_jwks_url: String,
+    pub alchemy_rpc_url: String,
+    pub alchemy_webhook_secret: String,
+    pub base_usdc_contract: String,          // canonical native USDC on Base
+    pub escrow_wallet_address: String,       // §11.2 Option A platform wallet
+    pub escrow_halt: bool,                   // §13.7 emergency circuit-breaker flag
+    pub moonpay_api_key: String,
+    pub moonpay_webhook_secret: String,
+    pub yellow_card_api_key: String,
+    pub sumsub_app_token: String,
+    pub sumsub_secret_key: String,
+    pub sumsub_webhook_secret: String,
 }
 
 impl AppConfig {
@@ -50,6 +70,29 @@ impl AppConfig {
             prembly_secret_key: std::env::var("PREMBLY_SECRET_KEY").unwrap_or_default(),
             prembly_base_url: std::env::var("PREMBLY_BASE_URL")
                 .unwrap_or_else(|_| "https://api.prembly.com".to_string()),
+
+            // V2 fields — all blank-by-default so Week 0 boots without
+            // them. Each becomes required as its feature wires up.
+            privy_app_id: std::env::var("PRIVY_APP_ID").unwrap_or_default(),
+            privy_app_secret: std::env::var("PRIVY_APP_SECRET").unwrap_or_default(),
+            privy_jwks_url: std::env::var("PRIVY_JWKS_URL")
+                .unwrap_or_else(|_| "https://auth.privy.io/api/v1/apps/_/jwks.json".to_string()),
+            alchemy_rpc_url: std::env::var("ALCHEMY_RPC_URL").unwrap_or_default(),
+            alchemy_webhook_secret: std::env::var("ALCHEMY_WEBHOOK_SECRET").unwrap_or_default(),
+            // Canonical native USDC on Base mainnet.
+            // https://docs.base.org/base-contracts (chainId 8453)
+            base_usdc_contract: std::env::var("BASE_USDC_CONTRACT")
+                .unwrap_or_else(|_| "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".to_string()),
+            escrow_wallet_address: std::env::var("ESCROW_WALLET_ADDRESS").unwrap_or_default(),
+            escrow_halt: std::env::var("ESCROW_HALT")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(false),
+            moonpay_api_key: std::env::var("MOONPAY_API_KEY").unwrap_or_default(),
+            moonpay_webhook_secret: std::env::var("MOONPAY_WEBHOOK_SECRET").unwrap_or_default(),
+            yellow_card_api_key: std::env::var("YELLOW_CARD_API_KEY").unwrap_or_default(),
+            sumsub_app_token: std::env::var("SUMSUB_APP_TOKEN").unwrap_or_default(),
+            sumsub_secret_key: std::env::var("SUMSUB_SECRET_KEY").unwrap_or_default(),
+            sumsub_webhook_secret: std::env::var("SUMSUB_WEBHOOK_SECRET").unwrap_or_default(),
         }
     }
 }

@@ -300,10 +300,23 @@ async fn main() -> std::io::Result<()> {
                         "/waitlist/count",
                         web::get().to(handlers::waitlist::waitlist_count),
                     )
-                    // Paystack webhook - no auth
+                    // Paystack webhook - no auth (V1, kept for backwards compat
+                    // during V2 build-out; removed once Rust port no longer
+                    // references it).
                     .route(
                         "/payments/webhook",
                         web::post().to(handlers::payments::paystack_webhook),
+                    )
+                    // V2 webhooks — Alchemy (USDC receive) and Sumsub (KYC
+                    // decision). Both verify HMAC signatures internally before
+                    // doing any DB work (§4.3, §3.5).
+                    .route(
+                        "/webhooks/alchemy/usdc-receive",
+                        web::post().to(handlers::webhook_chain::usdc_receive),
+                    )
+                    .route(
+                        "/webhooks/sumsub",
+                        web::post().to(handlers::webhook_sumsub::decision),
                     )
                     // Authenticated routes
                     .service(
@@ -505,6 +518,10 @@ async fn main() -> std::io::Result<()> {
                                 web::post().to(handlers::partner_v2::submit_identity_scan),
                             )
                             .route(
+                                "/partner/listings/{id}/pricing",
+                                web::post().to(handlers::partner_v2::set_listing_pricing),
+                            )
+                            .route(
                                 "/partner/listings/{id}/submit",
                                 web::post().to(handlers::partner_v2::submit_listing),
                             )
@@ -603,6 +620,18 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/admin/cars/{id}/reject",
                                 web::post().to(handlers::admin::reject_car),
+                            )
+                            .route(
+                                "/admin/partner-listings",
+                                web::get().to(handlers::admin::list_partner_listings),
+                            )
+                            .route(
+                                "/admin/partner-listings/{id}/approve",
+                                web::post().to(handlers::admin::approve_partner_listing),
+                            )
+                            .route(
+                                "/admin/partner-listings/{id}/reject",
+                                web::post().to(handlers::admin::reject_partner_listing),
                             )
                             .route(
                                 "/admin/bookings",

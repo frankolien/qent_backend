@@ -255,11 +255,28 @@ pub struct PartnerListing {
     #[schema(value_type = Object)]
     pub insurance_niid_response: Option<serde_json::Value>,
 
+    pub price_per_day: Option<f64>,
+    pub location: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub description: Option<String>,
+
     pub listing_status: String,
     pub rejection_reason: Option<String>,
 
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct SetListingPricingRequest {
+    #[validate(range(min = 0.0))]
+    pub price_per_day: f64,
+    #[validate(length(min = 2))]
+    pub location: String,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub description: Option<String>,
 }
 
 // ─── Request bodies ────────────────────────────────────────────────────────

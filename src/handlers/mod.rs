@@ -21,4 +21,6 @@ pub mod turn;
 pub mod upload;
 pub mod verification;
 pub mod waitlist;
+pub mod webhook_chain;
+pub mod webhook_sumsub;
 pub mod ws;

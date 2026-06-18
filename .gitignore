@@ -9,3 +9,16 @@
 # Local Netlify folder
 .netlify
 .DS_Store
+
+# Internal docs (not for public repo) — privacy policy is hosted on qent.online,
+# the guides are private dev notes.
+BACKEND_GUIDE.md
+LEARNING_GUIDE.md
+PRIVACY_POLICY.md
+QENT_V2_DESIGN.md
+
+# Jupyter notebook checkpoints — accidentally checked in
+.ipynb_checkpoints/
+
+
+book/

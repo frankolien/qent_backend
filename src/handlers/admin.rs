@@ -661,3 +661,287 @@ pub async fn reject_withdrawal(
 
     HttpResponse::Ok().json(serde_json::json!({"message": "Withdrawal rejected, funds returned", "transaction_id": txn_id}))
 }
+
+// ─── Partner v2 listings (admin review) ────────────────────────────────────
+
+/// GET /api/admin/partner-listings — list submissions awaiting review.
+/// Optional `?status=submitted|in_review|approved|rejected`; default returns
+/// only submissions in the review queue (submitted + in_review).
+#[utoipa::path(
+    get,
+    path = "/api/admin/partner-listings",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "Partner listings with host + profile info"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+    ),
+)]
+pub async fn list_partner_listings(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> HttpResponse {
+    if let Err(resp) = require_admin(&req) {
+        return resp;
+    }
+
+    let status_filter = query.get("status").cloned();
+
+    let sql = r#"
+        SELECT
+            l.id, l.application_ref, l.user_id, l.tier, l.brand, l.model, l.year,
+            l.color, l.plate_number, l.photos, l.listing_status, l.rejection_reason,
+            l.vehicle_registration_url, l.insurance_certificate_url,
+            l.insurance_policy_number, l.vehicle_plate_frsc_verified,
+            l.insurance_niid_verified, l.owner_consent_required,
+            l.created_at, l.updated_at,
+            p.legal_full_name, p.contract_email, p.phone, p.identity_status,
+            p.drivers_license_number, p.drivers_license_front_url,
+            p.drivers_license_back_url, p.profile_photo_url,
+            u.full_name AS user_full_name, u.email AS user_email
+        FROM partner_listings l
+        JOIN partner_profiles p ON p.id = l.profile_id
+        JOIN users u ON u.id = l.user_id
+        WHERE ($1::text IS NULL AND l.listing_status IN ('submitted','in_review'))
+           OR ($1::text IS NOT NULL AND l.listing_status = $1::text)
+        ORDER BY l.created_at DESC
+    "#;
+
+    let rows = sqlx::query(sql)
+        .bind(status_filter)
+        .fetch_all(pool.get_ref())
+        .await;
+
+    match rows {
+        Ok(records) => {
+            use sqlx::Row;
+            let payload: Vec<serde_json::Value> = records
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "id": r.get::<Uuid, _>("id"),
+                        "application_ref": r.get::<String, _>("application_ref"),
+                        "user_id": r.get::<Uuid, _>("user_id"),
+                        "tier": r.get::<String, _>("tier"),
+                        "brand": r.get::<String, _>("brand"),
+                        "model": r.get::<String, _>("model"),
+                        "year": r.try_get::<Option<i32>, _>("year").ok().flatten(),
+                        "color": r.try_get::<Option<String>, _>("color").ok().flatten(),
+                        "plate_number": r.get::<String, _>("plate_number"),
+                        "photos": r.get::<Vec<String>, _>("photos"),
+                        "listing_status": r.get::<String, _>("listing_status"),
+                        "rejection_reason": r.try_get::<Option<String>, _>("rejection_reason").ok().flatten(),
+                        "vehicle_registration_url": r.try_get::<Option<String>, _>("vehicle_registration_url").ok().flatten(),
+                        "insurance_certificate_url": r.try_get::<Option<String>, _>("insurance_certificate_url").ok().flatten(),
+                        "insurance_policy_number": r.try_get::<Option<String>, _>("insurance_policy_number").ok().flatten(),
+                        "vehicle_plate_frsc_verified": r.get::<bool, _>("vehicle_plate_frsc_verified"),
+                        "insurance_niid_verified": r.get::<bool, _>("insurance_niid_verified"),
+                        "owner_consent_required": r.get::<bool, _>("owner_consent_required"),
+                        "created_at": r.get::<chrono::NaiveDateTime, _>("created_at"),
+                        "updated_at": r.get::<chrono::NaiveDateTime, _>("updated_at"),
+                        "profile": {
+                            "legal_full_name": r.get::<String, _>("legal_full_name"),
+                            "contract_email": r.get::<String, _>("contract_email"),
+                            "phone": r.get::<String, _>("phone"),
+                            "identity_status": r.get::<String, _>("identity_status"),
+                            "drivers_license_number": r.get::<String, _>("drivers_license_number"),
+                            "drivers_license_front_url": r.try_get::<Option<String>, _>("drivers_license_front_url").ok().flatten(),
+                            "drivers_license_back_url": r.try_get::<Option<String>, _>("drivers_license_back_url").ok().flatten(),
+                            "profile_photo_url": r.try_get::<Option<String>, _>("profile_photo_url").ok().flatten(),
+                        },
+                        "user": {
+                            "full_name": r.get::<String, _>("user_full_name"),
+                            "email": r.get::<String, _>("user_email"),
+                        },
+                    })
+                })
+                .collect();
+            HttpResponse::Ok().json(payload)
+        }
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+pub struct AdminRejectBody {
+    pub reason: Option<String>,
+}
+
+/// POST /api/admin/partner-listings/{id}/approve
+#[utoipa::path(
+    post,
+    path = "/api/admin/partner-listings/{id}/approve",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Partner listing ID")),
+    responses(
+        (status = 200, description = "Listing approved"),
+        (status = 404, description = "Listing not found or not in a reviewable state"),
+    ),
+)]
+pub async fn approve_partner_listing(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    if let Err(resp) = require_admin(&req) {
+        return resp;
+    }
+
+    let listing_id = path.into_inner();
+
+    let listing = sqlx::query_as::<_, crate::models::PartnerListing>(
+        "SELECT * FROM partner_listings WHERE id = $1
+         AND listing_status IN ('submitted','in_review')",
+    )
+    .bind(listing_id)
+    .fetch_optional(pool.get_ref())
+    .await;
+    let listing = match listing {
+        Ok(Some(l)) => l,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Listing not found or not awaiting review"
+            }))
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
+    };
+
+    let price = match listing.price_per_day {
+        Some(p) => p,
+        None => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Listing has no price set — host must complete the Pricing step before approval"
+            }))
+        }
+    };
+    let location = match listing.location.clone() {
+        Some(l) if !l.is_empty() => l,
+        _ => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Listing has no location set — host must complete the Pricing step before approval"
+            }))
+        }
+    };
+
+    let mut tx = match pool.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
+    };
+
+    let car_id = Uuid::new_v4();
+    let empty_features: Vec<String> = vec![];
+    let insert_car = sqlx::query(
+        r#"INSERT INTO cars
+            (id, host_id, make, model, year, color, plate_number, description,
+             price_per_day, location, latitude, longitude, photos, features,
+             status, seats, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'active', 5, NOW(), NOW())"#,
+    )
+    .bind(car_id)
+    .bind(listing.user_id)
+    .bind(&listing.brand)
+    .bind(&listing.model)
+    .bind(listing.year)
+    .bind(&listing.color)
+    .bind(&listing.plate_number)
+    .bind(listing.description.clone().unwrap_or_default())
+    .bind(price)
+    .bind(&location)
+    .bind(listing.latitude)
+    .bind(listing.longitude)
+    .bind(&listing.photos)
+    .bind(&empty_features)
+    .execute(&mut *tx)
+    .await;
+    if let Err(e) = insert_car {
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": format!("Insert car failed: {e}")}));
+    }
+
+    let update_listing = sqlx::query(
+        "UPDATE partner_listings
+         SET listing_status = 'approved', rejection_reason = NULL,
+             car_id = $2, updated_at = NOW()
+         WHERE id = $1",
+    )
+    .bind(listing_id)
+    .bind(car_id)
+    .execute(&mut *tx)
+    .await;
+    if let Err(e) = update_listing {
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()}));
+    }
+
+    let _ = sqlx::query(
+        "UPDATE users SET role = 'host', updated_at = NOW()
+         WHERE id = $1 AND role <> 'host' AND role <> 'admin'",
+    )
+    .bind(listing.user_id)
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = tx.commit().await {
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()}));
+    }
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "message": "Listing approved", "car_id": car_id
+    }))
+}
+
+/// POST /api/admin/partner-listings/{id}/reject
+#[utoipa::path(
+    post,
+    path = "/api/admin/partner-listings/{id}/reject",
+    tag = "Admin",
+    security(("bearer_auth" = [])),
+    params(("id" = Uuid, Path, description = "Partner listing ID")),
+    request_body = AdminRejectBody,
+    responses(
+        (status = 200, description = "Listing rejected"),
+        (status = 404, description = "Listing not found"),
+    ),
+)]
+pub async fn reject_partner_listing(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<Uuid>,
+    body: web::Json<AdminRejectBody>,
+) -> HttpResponse {
+    if let Err(resp) = require_admin(&req) {
+        return resp;
+    }
+
+    let listing_id = path.into_inner();
+    let result = sqlx::query(
+        "UPDATE partner_listings
+         SET listing_status = 'rejected', rejection_reason = $2, updated_at = NOW()
+         WHERE id = $1",
+    )
+    .bind(listing_id)
+    .bind(body.reason.clone())
+    .execute(pool.get_ref())
+    .await;
+
+    match result {
+        Ok(r) if r.rows_affected() > 0 => {
+            HttpResponse::Ok().json(serde_json::json!({"message": "Listing rejected"}))
+        }
+        Ok(_) => HttpResponse::NotFound()
+            .json(serde_json::json!({"error": "Listing not found"})),
+        Err(e) => HttpResponse::InternalServerError()
+            .json(serde_json::json!({"error": e.to_string()})),
+    }
+}
