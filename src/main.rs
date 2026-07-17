@@ -272,7 +272,7 @@ async fn main() -> std::io::Result<()> {
                             )
                             .route(
                                 "/privy",
-                                web::post().to(handlers::auth_v2::exchange_privy),
+                                web::post().to(handlers::auth_privy::exchange_privy),
                             ),
                     )
                     // V2 country picker — public list, authed set
@@ -282,8 +282,8 @@ async fn main() -> std::io::Result<()> {
                     )
                     // V2 cars search — public (browse without auth)
                     .route(
-                        "/v2/cars/search",
-                        web::get().to(handlers::cars_v2::search),
+                        "/cars/search",
+                        web::get().to(handlers::cars_search::search),
                     )
                     // Cars - public
                     .route("/cars/search", web::get().to(handlers::cars::search_cars))
@@ -413,12 +413,12 @@ async fn main() -> std::io::Result<()> {
                             // (book → host approve → renter pays)
                             // while swapping Paystack for USDC.
                             .route(
-                                "/v2/bookings/{id}/pay",
-                                web::post().to(handlers::bookings_v2::request_payment_intent),
+                                "/bookings/{id}/pay-usdc",
+                                web::post().to(handlers::bookings_pay::request_payment_intent),
                             )
                             .route(
-                                "/v2/payments/{id}/submit-tx",
-                                web::post().to(handlers::bookings_v2::submit_tx),
+                                "/payments/{id}/submit-tx",
+                                web::post().to(handlers::bookings_pay::submit_tx),
                             )
                             .route(
                                 "/bookings/mine",
@@ -545,47 +545,47 @@ async fn main() -> std::io::Result<()> {
                             // with the legacy single-shot /partner/apply.
                             .route(
                                 "/partner/profile",
-                                web::get().to(handlers::partner_v2::get_profile),
+                                web::get().to(handlers::partner_onboarding::get_profile),
                             )
                             .route(
                                 "/partner/profile",
-                                web::post().to(handlers::partner_v2::upsert_profile),
+                                web::post().to(handlers::partner_onboarding::upsert_profile),
                             )
                             .route(
                                 "/partner/listings",
-                                web::get().to(handlers::partner_v2::list_listings),
+                                web::get().to(handlers::partner_onboarding::list_listings),
                             )
                             .route(
                                 "/partner/listings",
-                                web::post().to(handlers::partner_v2::create_listing),
+                                web::post().to(handlers::partner_onboarding::create_listing),
                             )
                             .route(
                                 "/partner/listings/draft",
-                                web::get().to(handlers::partner_v2::get_draft_listing),
+                                web::get().to(handlers::partner_onboarding::get_draft_listing),
                             )
                             .route(
                                 "/partner/listings/{id}/photos",
-                                web::put().to(handlers::partner_v2::update_listing_photos),
+                                web::put().to(handlers::partner_onboarding::update_listing_photos),
                             )
                             .route(
                                 "/partner/listings/{id}/docs",
-                                web::post().to(handlers::partner_v2::submit_listing_docs),
+                                web::post().to(handlers::partner_onboarding::submit_listing_docs),
                             )
                             .route(
                                 "/partner/listings/{id}/owner-consent",
-                                web::post().to(handlers::partner_v2::submit_owner_consent),
+                                web::post().to(handlers::partner_onboarding::submit_owner_consent),
                             )
                             .route(
                                 "/partner/listings/{id}/pricing",
-                                web::post().to(handlers::partner_v2::set_listing_pricing),
+                                web::post().to(handlers::partner_onboarding::set_listing_pricing),
                             )
                             .route(
                                 "/partner/listings/{id}/submit",
-                                web::post().to(handlers::partner_v2::submit_listing),
+                                web::post().to(handlers::partner_onboarding::submit_listing),
                             )
                             .route(
                                 "/partner/email/mark-verified",
-                                web::post().to(handlers::partner_v2::mark_email_verified),
+                                web::post().to(handlers::partner_onboarding::mark_email_verified),
                             )
                             // Stories
                             .route("/stories", web::get().to(handlers::stories::get_stories))

@@ -144,7 +144,7 @@ pub async fn search(
     match result {
         Ok(rows) => HttpResponse::Ok().json(rows),
         Err(e) => {
-            log::error!("cars_v2::search failed: {e}");
+            log::error!("cars_search::search failed: {e}");
             HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
         }
     }
