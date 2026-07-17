@@ -23,6 +23,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::handlers::ws::{SendToUser, WsManager, WsMessage};
+use crate::services::booking_workflows::BookingWorkflows;
 use crate::services::AppConfig;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -72,7 +73,11 @@ pub async fn usdc_receive(
         log::error!("Alchemy webhook hit but ALCHEMY_WEBHOOK_SECRET not set");
         return HttpResponse::ServiceUnavailable().finish();
     }
-    let signature = match req.headers().get("X-Alchemy-Signature").and_then(|v| v.to_str().ok()) {
+    let signature = match req
+        .headers()
+        .get("X-Alchemy-Signature")
+        .and_then(|v| v.to_str().ok())
+    {
         Some(s) => s,
         None => {
             log::warn!("Alchemy webhook missing X-Alchemy-Signature");
@@ -101,10 +106,7 @@ pub async fn usdc_receive(
     if envelope.event_type.as_deref() != Some("ADDRESS_ACTIVITY") {
         return HttpResponse::Ok().finish();
     }
-    let activities = envelope
-        .event
-        .and_then(|e| e.activity)
-        .unwrap_or_default();
+    let activities = envelope.event.and_then(|e| e.activity).unwrap_or_default();
 
     let usdc_contract = config.base_usdc_contract.to_lowercase();
     let escrow = config.escrow_wallet_address.to_lowercase();
@@ -216,48 +218,43 @@ async fn process_activity(
         .unwrap_or(true); // if no from set, trust the chain
 
     if !amount_match || !from_match {
-        sqlx::query(
-            "UPDATE payments SET status = 'mismatch', confirmed_at = NOW() WHERE id = $1",
-        )
-        .bind(payment_id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE payments SET status = 'mismatch', confirmed_at = NOW() WHERE id = $1")
+            .bind(payment_id)
+            .execute(pool)
+            .await?;
         log::warn!(
             "Payment {payment_id} mismatch: amount {amount} vs {expected_amount}, from {from} vs {expected_from:?}"
         );
         return Ok(());
     }
 
-    // Happy path — single transaction flips payment + booking.
-    let mut tx = pool.begin().await?;
-    sqlx::query(
-        "UPDATE payments SET status = 'success', confirmed_at = NOW() WHERE id = $1 AND status = 'broadcast'",
-    )
-    .bind(payment_id)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "UPDATE bookings SET status = 'paid', updated_at = NOW() WHERE id = $1 AND status = 'pending_payment'",
-    )
-    .bind(booking_id)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
+    // Happy path — central workflow flips payment + booking.
+    let confirmation =
+        BookingWorkflows::confirm_payment_received(pool, payment_id, booking_id, payer_id)
+            .await
+            .map_err(|e| ActivityError::Db(sqlx::Error::Protocol(e.to_string())))?;
 
-    // Fire-and-forget WS push (§4.1 step 17).
-    ws_manager.do_send(SendToUser {
-        user_id: payer_id,
-        message: WsMessage {
-            msg_type: "booking.paid".to_string(),
-            payload: serde_json::json!({
-                "booking_id": booking_id,
-                "payment_id": payment_id,
-                "tx_hash": tx_hash,
-            }),
-        },
-    });
+    if confirmation.changed {
+        // Fire-and-forget WS push (§4.1 step 17).
+        ws_manager.do_send(SendToUser {
+            user_id: confirmation.payer_id,
+            message: WsMessage {
+                msg_type: "booking.paid".to_string(),
+                payload: serde_json::json!({
+                    "booking_id": confirmation.booking_id,
+                    "payment_id": confirmation.payment_id,
+                    "tx_hash": tx_hash,
+                }),
+            },
+        });
 
-    log::info!("Booking {booking_id} marked paid (payment {payment_id}, tx {tx_hash})");
+        log::info!(
+            "Booking {} marked paid (payment {}, tx {})",
+            confirmation.booking_id,
+            confirmation.payment_id,
+            tx_hash
+        );
+    }
     Ok(())
 }
 

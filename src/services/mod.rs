@@ -1,4 +1,6 @@
 pub mod apple_auth;
+pub mod booking_notifications;
+pub mod booking_workflows;
 pub mod chain;
 pub mod email;
 pub mod google_auth;
@@ -30,9 +32,9 @@ pub struct AppConfig {
     pub privy_jwks_url: String,
     pub alchemy_rpc_url: String,
     pub alchemy_webhook_secret: String,
-    pub base_usdc_contract: String,          // canonical native USDC on Base
-    pub escrow_wallet_address: String,       // §11.2 Option A platform wallet
-    pub escrow_halt: bool,                   // §13.7 emergency circuit-breaker flag
+    pub base_usdc_contract: String,    // canonical native USDC on Base
+    pub escrow_wallet_address: String, // §11.2 Option A platform wallet
+    pub escrow_halt: bool,             // §13.7 emergency circuit-breaker flag
     pub moonpay_api_key: String,
     pub moonpay_webhook_secret: String,
     pub yellow_card_api_key: String,

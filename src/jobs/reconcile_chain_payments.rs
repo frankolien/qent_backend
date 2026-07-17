@@ -14,6 +14,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::handlers::ws::{SendToUser, WsManager, WsMessage};
+use crate::services::booking_workflows::BookingWorkflows;
 use crate::services::chain::{ChainClient, ChainError};
 use crate::services::AppConfig;
 
@@ -62,10 +63,7 @@ async fn tick(
     ws_manager: &Addr<WsManager>,
 ) -> Result<(), sqlx::Error> {
     // Stragglers: status='broadcast' AND submitted_at < now - 30s.
-    let candidates = sqlx::query_as::<
-        _,
-        (Uuid, Uuid, String, Decimal, Option<String>, Uuid),
-    >(
+    let candidates = sqlx::query_as::<_, (Uuid, Uuid, String, Decimal, Option<String>, Uuid)>(
         r#"SELECT p.id, p.booking_id, p.tx_hash, p.amount_usdc::numeric, p.from_address, p.payer_id
            FROM payments p
            WHERE p.status = 'broadcast'
@@ -83,7 +81,10 @@ async fn tick(
     if candidates.is_empty() {
         return Ok(());
     }
-    log::info!("reconcile_chain_payments: {} candidate(s)", candidates.len());
+    log::info!(
+        "reconcile_chain_payments: {} candidate(s)",
+        candidates.len()
+    );
 
     for (payment_id, booking_id, tx_hash, expected_amount, expected_from, payer_id) in candidates {
         match chain.fetch_usdc_transfer(&tx_hash).await {
@@ -110,21 +111,27 @@ async fn tick(
                     mark_mismatch(pool, payment_id).await?;
                     continue;
                 }
-                if flip_to_paid(pool, payment_id, booking_id).await? {
+                let confirmation = BookingWorkflows::confirm_payment_received(
+                    pool, payment_id, booking_id, payer_id,
+                )
+                .await
+                .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+                if confirmation.changed {
                     ws_manager.do_send(SendToUser {
-                        user_id: payer_id,
+                        user_id: confirmation.payer_id,
                         message: WsMessage {
                             msg_type: "booking.paid".to_string(),
                             payload: serde_json::json!({
-                                "booking_id": booking_id,
-                                "payment_id": payment_id,
+                                "booking_id": confirmation.booking_id,
+                                "payment_id": confirmation.payment_id,
                                 "tx_hash": tx_hash,
                                 "via": "reconciler",
                             }),
                         },
                     });
                     log::info!(
-                        "reconciler: booking {booking_id} marked paid via fallback path"
+                        "reconciler: booking {} marked paid via fallback path",
+                        confirmation.booking_id
                     );
                 }
             }
@@ -156,32 +163,4 @@ async fn mark_mismatch(pool: &PgPool, payment_id: Uuid) -> Result<(), sqlx::Erro
     .execute(pool)
     .await?;
     Ok(())
-}
-
-/// Returns true if this path flipped the rows (i.e. webhook didn't beat us).
-async fn flip_to_paid(
-    pool: &PgPool,
-    payment_id: Uuid,
-    booking_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    let flipped = sqlx::query(
-        "UPDATE payments SET status = 'success', confirmed_at = NOW() WHERE id = $1 AND status = 'broadcast'",
-    )
-    .bind(payment_id)
-    .execute(&mut *tx)
-    .await?
-    .rows_affected();
-    if flipped == 0 {
-        tx.rollback().await?;
-        return Ok(false);
-    }
-    sqlx::query(
-        "UPDATE bookings SET status = 'paid', updated_at = NOW() WHERE id = $1 AND status = 'pending_payment'",
-    )
-    .bind(booking_id)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(true)
 }

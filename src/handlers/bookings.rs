@@ -3,9 +3,11 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::{
-    Booking, BookingAction, BookingActionRequest, BookingStatus, BookingWithCar, Car, Claims,
+    Booking, BookingActionRequest, BookingStatus, BookingWithCar, Car, Claims,
     CreateBookingRequest, ProtectionPlan, UserRole,
 };
+use crate::services::booking_notifications::BookingNotifications;
+use crate::services::booking_workflows::{BookingWorkflowError, BookingWorkflows};
 use crate::services::email::EmailService;
 use crate::services::push::PushService;
 use crate::services::AppConfig;
@@ -148,20 +150,24 @@ pub async fn create_booking(
 
     match result {
         Ok(booking) => {
-            // Notify host about new booking request
-            let _ = create_notification(
-                pool.get_ref(),
-                push.get_ref().as_ref(),
-                car.host_id,
-                "New Booking Request",
-                &format!(
-                    "You have a new booking request for your {} {}",
-                    car.make, car.model
-                ),
-                "booking_request",
-                Some(serde_json::json!({"booking_id": booking.id.to_string()})),
-            )
-            .await;
+            let email_service = EmailService::new(String::new());
+            let notifications = BookingNotifications {
+                pool: pool.get_ref(),
+                push: push.get_ref().as_ref(),
+                email: &email_service,
+            };
+            let _ = notifications
+                .create_notification(
+                    car.host_id,
+                    "New Booking Request",
+                    &format!(
+                        "You have a new booking request for your {} {}",
+                        car.make, car.model
+                    ),
+                    "booking_request",
+                    Some(serde_json::json!({"booking_id": booking.id.to_string()})),
+                )
+                .await;
             HttpResponse::Created().json(booking)
         }
         Err(e) => {
@@ -293,114 +299,28 @@ pub async fn update_booking_status(
 
     let booking_id = path.into_inner();
 
-    let booking = match sqlx::query_as::<_, Booking>("SELECT * FROM bookings WHERE id = $1")
-        .bind(booking_id)
-        .fetch_optional(pool.get_ref())
-        .await
-    {
-        Ok(Some(b)) => b,
-        Ok(None) => {
-            return HttpResponse::NotFound().json(serde_json::json!({"error": "Booking not found"}))
-        }
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": e.to_string()}))
-        }
-    };
+    let transition =
+        match BookingWorkflows::apply_action(pool.get_ref(), booking_id, &claims, &body).await {
+            Ok(t) => t,
+            Err(BookingWorkflowError::BookingNotFound) => {
+                return HttpResponse::NotFound()
+                    .json(serde_json::json!({"error": "Booking not found"}))
+            }
+            Err(BookingWorkflowError::Forbidden(msg)) => {
+                return HttpResponse::Forbidden().json(serde_json::json!({"error": msg}))
+            }
+            Err(BookingWorkflowError::InvalidTransition(msg)) => {
+                return HttpResponse::BadRequest().json(serde_json::json!({"error": msg}))
+            }
+            Err(e) => {
+                log::error!("booking workflow error for {}: {}", booking_id, e);
+                return HttpResponse::InternalServerError()
+                    .json(serde_json::json!({"error": "Failed to update booking"}));
+            }
+        };
 
-    let new_status = match body.action {
-        BookingAction::Approve => {
-            if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden()
-                    .json(serde_json::json!({"error": "Only the host can approve"}));
-            }
-            if booking.status != BookingStatus::Pending {
-                return HttpResponse::BadRequest()
-                    .json(serde_json::json!({"error": "Booking is not pending"}));
-            }
-            BookingStatus::Approved
-        }
-        BookingAction::Reject => {
-            if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden()
-                    .json(serde_json::json!({"error": "Only the host can reject"}));
-            }
-            BookingStatus::Rejected
-        }
-        BookingAction::Cancel => {
-            if booking.renter_id != claims.sub
-                && booking.host_id != claims.sub
-                && claims.role != UserRole::Admin
-            {
-                return HttpResponse::Forbidden()
-                    .json(serde_json::json!({"error": "Not authorized to cancel"}));
-            }
-            BookingStatus::Cancelled
-        }
-        BookingAction::Activate => {
-            if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden()
-                    .json(serde_json::json!({"error": "Only the host can activate"}));
-            }
-            // V1 used `confirmed` post-Paystack; V2 USDC pipeline lands
-            // bookings in `paid`. Both are the same logical state —
-            // money is in escrow, host can hand over the car.
-            if booking.status != BookingStatus::Approved
-                && booking.status != BookingStatus::Confirmed
-                && booking.status != BookingStatus::Paid
-            {
-                return HttpResponse::BadRequest().json(serde_json::json!({
-                    "error": "Booking must be paid to activate"
-                }));
-            }
-            BookingStatus::Active
-        }
-        BookingAction::Complete => {
-            if booking.host_id != claims.sub && claims.role != UserRole::Admin {
-                return HttpResponse::Forbidden()
-                    .json(serde_json::json!({"error": "Only the host can complete"}));
-            }
-            if booking.status != BookingStatus::Active {
-                return HttpResponse::BadRequest()
-                    .json(serde_json::json!({"error": "Booking is not active"}));
-            }
-            BookingStatus::Completed
-        }
-    };
-
-    let result = sqlx::query_as::<_, Booking>(
-        r#"UPDATE bookings SET status = $1, cancellation_reason = $2, updated_at = NOW()
-        WHERE id = $3 RETURNING *"#,
-    )
-    .bind(&new_status)
-    .bind(&body.reason)
-    .bind(booking_id)
-    .fetch_one(pool.get_ref())
-    .await;
-
-    // If completed, credit host wallet
-    if new_status == BookingStatus::Completed {
-        let host_payout = booking.subtotal * 0.85; // Host gets 85% (platform takes 15%)
-        let _ = sqlx::query(
-            "UPDATE users SET wallet_balance = wallet_balance + $1, updated_at = NOW() WHERE id = $2",
-        )
-        .bind(host_payout)
-        .bind(booking.host_id)
-        .execute(pool.get_ref())
-        .await;
-
-        let _ = sqlx::query(
-            r#"INSERT INTO wallet_transactions (id, user_id, amount, balance_after, description, reference_id, created_at)
-            VALUES ($1, $2, $3, (SELECT wallet_balance FROM users WHERE id = $2), $4, $5, NOW())"#,
-        )
-        .bind(Uuid::new_v4())
-        .bind(booking.host_id)
-        .bind(host_payout)
-        .bind(format!("Payout for booking {}", booking_id))
-        .bind(booking_id)
-        .execute(pool.get_ref())
-        .await;
-    }
+    let booking = transition.before;
+    let updated_booking = transition.after;
 
     // Fetch car name for notification
     let car_name =
@@ -412,184 +332,17 @@ pub async fn update_booking_status(
             .flatten()
             .unwrap_or_else(|| "your car".to_string());
 
-    match &result {
-        Ok(b) => {
-            let data = Some(serde_json::json!({"booking_id": b.id.to_string()}));
-            match new_status {
-                BookingStatus::Approved => {
-                    let _ = create_notification(
-                        pool.get_ref(),
-                        push.get_ref().as_ref(),
-                        booking.renter_id,
-                        "Booking Approved",
-                        &format!("Your booking for {} has been approved! Coordinate pickup with the host.", car_name),
-                        "booking_approved", data,
-                    ).await;
-                }
-                BookingStatus::Rejected => {
-                    let _ = create_notification(
-                        pool.get_ref(),
-                        push.get_ref().as_ref(),
-                        booking.renter_id,
-                        "Booking Declined",
-                        &format!("Your booking for {} was declined by the host.", car_name),
-                        "booking_rejected",
-                        data,
-                    )
-                    .await;
-                }
-                BookingStatus::Cancelled => {
-                    // Notify the other party
-                    let notify_user = if claims.sub == booking.renter_id {
-                        booking.host_id
-                    } else {
-                        booking.renter_id
-                    };
-                    let _ = create_notification(
-                        pool.get_ref(),
-                        push.get_ref().as_ref(),
-                        notify_user,
-                        "Booking Cancelled",
-                        &format!("A booking for {} has been cancelled.", car_name),
-                        "booking_cancelled",
-                        data,
-                    )
-                    .await;
-                }
-                BookingStatus::Active => {
-                    let _ = create_notification(
-                        pool.get_ref(),
-                        push.get_ref().as_ref(),
-                        booking.renter_id,
-                        "Trip Started",
-                        &format!(
-                            "Your trip with {} is now active. Enjoy your ride!",
-                            car_name
-                        ),
-                        "booking_active",
-                        data,
-                    )
-                    .await;
-                }
-                BookingStatus::Completed => {
-                    let _ = create_notification(
-                        pool.get_ref(),
-                        push.get_ref().as_ref(),
-                        booking.renter_id,
-                        "Trip Completed",
-                        &format!("Your trip with {} is complete. Leave a review!", car_name),
-                        "booking_completed",
-                        data,
-                    )
-                    .await;
-                }
-                _ => {}
-            }
+    let email_service = EmailService::new(config.resend_api_key.clone());
+    let notifications = BookingNotifications {
+        pool: pool.get_ref(),
+        push: push.get_ref().as_ref(),
+        email: &email_service,
+    };
+    notifications
+        .send_status_changed(&claims, &booking, &updated_booking, &car_name)
+        .await;
 
-            // Send status change email
-            let email_service = EmailService::new(config.resend_api_key.clone());
-            let (notify_user_id, email_msg) = match new_status {
-                BookingStatus::Approved => (
-                    booking.renter_id,
-                    format!(
-                        "Your booking for {} has been approved! Coordinate pickup with the host.",
-                        car_name
-                    ),
-                ),
-                BookingStatus::Rejected => (
-                    booking.renter_id,
-                    format!("Your booking for {} was declined by the host.", car_name),
-                ),
-                BookingStatus::Cancelled => {
-                    let other = if claims.sub == booking.renter_id {
-                        booking.host_id
-                    } else {
-                        booking.renter_id
-                    };
-                    (
-                        other,
-                        format!("A booking for {} has been cancelled.", car_name),
-                    )
-                }
-                BookingStatus::Active => (
-                    booking.renter_id,
-                    format!(
-                        "Your trip with {} is now active. Enjoy your ride!",
-                        car_name
-                    ),
-                ),
-                BookingStatus::Completed => (
-                    booking.renter_id,
-                    format!(
-                        "Your trip with {} is complete. We'd love your feedback!",
-                        car_name
-                    ),
-                ),
-                _ => (booking.renter_id, String::new()),
-            };
-
-            if !email_msg.is_empty() {
-                let user_info = sqlx::query_as::<_, (String, String)>(
-                    "SELECT email, full_name FROM users WHERE id = $1",
-                )
-                .bind(notify_user_id)
-                .fetch_optional(pool.get_ref())
-                .await;
-
-                if let Ok(Some((email, name))) = user_info {
-                    let status_str = format!("{:?}", new_status).to_lowercase();
-                    email_service
-                        .send_status_email(&email, &name, &car_name, &status_str, &email_msg)
-                        .await;
-                }
-            }
-        }
-        Err(_) => {}
-    }
-
-    match result {
-        Ok(b) => HttpResponse::Ok().json(b),
-        Err(e) => {
-            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
-        }
-    }
-}
-
-/// Helper to create a notification record
-async fn create_notification(
-    pool: &PgPool,
-    push: Option<&PushService>,
-    user_id: Uuid,
-    title: &str,
-    message: &str,
-    notification_type: &str,
-    data: Option<serde_json::Value>,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        r#"INSERT INTO notifications (id, user_id, title, message, notification_type, is_read, data, created_at)
-        VALUES ($1, $2, $3, $4, $5, false, $6, NOW())"#,
-    )
-    .bind(Uuid::new_v4())
-    .bind(user_id)
-    .bind(title)
-    .bind(message)
-    .bind(notification_type)
-    .bind(data.clone())
-    .execute(pool)
-    .await?;
-
-    if let Some(push) = push {
-        let payload = data.unwrap_or_else(|| serde_json::json!({}));
-        let pool = pool.clone();
-        let push = push.clone();
-        let title = title.to_string();
-        let message = message.to_string();
-        tokio::spawn(async move {
-            push.send_to_user(&pool, user_id, &title, &message, payload).await;
-        });
-    }
-
-    Ok(())
+    HttpResponse::Ok().json(updated_booking)
 }
 
 /// GET /api/bookings/host/pending — Bookings awaiting host approval
