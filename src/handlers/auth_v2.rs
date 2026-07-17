@@ -112,7 +112,8 @@ pub async fn exchange_privy(
     .fetch_optional(pool.get_ref())
     .await;
 
-    let (user, wallet_address) = match existing {
+    let (user, wallet_address) = 'resolved: {
+        match existing {
         Ok(Some(u)) => {
             let addr = sqlx::query_scalar::<_, String>(
                 "SELECT address FROM wallets WHERE user_id = $1",
@@ -175,9 +176,69 @@ pub async fn exchange_privy(
             if let Err(e) = insert {
                 let msg = e.to_string();
                 if msg.contains("users_email_key") || msg.contains("duplicate key") {
-                    return HttpResponse::Conflict().json(serde_json::json!({
-                        "error": "Email already registered with another sign-in method"
-                    }));
+                    // V1 → V2 migration path: the email already exists
+                    // as a password-only account. If it doesn't have a
+                    // Privy DID yet, claim it for this Privy user. If a
+                    // *different* DID is already attached, that's a real
+                    // conflict (someone is trying to sign in with the
+                    // wrong email).
+                    let existing = sqlx::query_as::<_, (Uuid, Option<String>)>(
+                        "SELECT id, privy_user_id FROM users WHERE email = $1 LIMIT 1",
+                    )
+                    .bind(&email)
+                    .fetch_optional(pool.get_ref())
+                    .await
+                    .ok()
+                    .flatten();
+
+                    match existing {
+                        Some((existing_id, None)) => {
+                            let migrated = sqlx::query_as::<_, User>(
+                                r#"UPDATE users SET
+                                    privy_user_id = $1,
+                                    auth_provider = $2,
+                                    updated_at = NOW()
+                                   WHERE id = $3
+                                   RETURNING *"#,
+                            )
+                            .bind(&session.privy_user_id)
+                            .bind(&details.auth_provider)
+                            .bind(existing_id)
+                            .fetch_one(pool.get_ref())
+                            .await;
+                            match migrated {
+                                Ok(u) => {
+                                    // Best-effort wallet provisioning for
+                                    // the migrated V1 user — same path as
+                                    // the brand-new Privy user branch.
+                                    let addr = ensure_privy_wallet(
+                                        u.id,
+                                        &session.privy_user_id,
+                                        &wallet,
+                                        &pool,
+                                    )
+                                    .await;
+                                    break 'resolved (u, addr);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to migrate V1 user to Privy: {e}");
+                                    return HttpResponse::InternalServerError().json(
+                                        serde_json::json!({"error": "Migration failed"}),
+                                    );
+                                }
+                            }
+                        }
+                        Some(_) => {
+                            return HttpResponse::Conflict().json(serde_json::json!({
+                                "error": "Email already linked to a different Privy account"
+                            }));
+                        }
+                        None => {
+                            log::error!("Race on Privy insert: {e}");
+                            return HttpResponse::InternalServerError()
+                                .json(serde_json::json!({"error": "Failed to create account"}));
+                        }
+                    }
                 }
                 log::error!("Failed to create Privy user: {e}");
                 return HttpResponse::InternalServerError()
@@ -189,28 +250,8 @@ pub async fn exchange_privy(
             // wallet is required only at booking time, and we retry
             // lazily there. The `wallets` row is what the rest of the
             // app reads from.
-            let mut wallet_address: Option<String> = None;
-            match wallet.create_wallet(&session.privy_user_id).await {
-                Ok(w) => {
-                    let _ = sqlx::query(
-                        r#"INSERT INTO wallets (user_id, address, chain, privy_wallet_id)
-                           VALUES ($1, $2, 'base', $3)
-                           ON CONFLICT (user_id) DO NOTHING"#,
-                    )
-                    .bind(id)
-                    .bind(&w.address)
-                    .bind(&w.privy_wallet_id)
-                    .execute(pool.get_ref())
-                    .await;
-                    wallet_address = Some(w.address);
-                }
-                Err(WalletError::NotConfigured) => {
-                    log::warn!("Privy create_wallet skipped: not configured");
-                }
-                Err(e) => {
-                    log::warn!("Privy create_wallet failed (will retry on booking): {e}");
-                }
-            }
+            let wallet_address =
+                ensure_privy_wallet(id, &session.privy_user_id, &wallet, &pool).await;
 
             let user = match sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
                 .bind(id)
@@ -230,6 +271,7 @@ pub async fn exchange_privy(
             log::error!("DB error looking up Privy user: {e}");
             return HttpResponse::InternalServerError()
                 .json(serde_json::json!({"error": "Internal server error"}));
+        }
         }
     };
 
@@ -273,4 +315,48 @@ struct AuthV2Body {
     kyc_tier: i32,
     country: Option<String>,
     wallet_address: Option<String>,
+}
+
+/// Mint a Privy embedded wallet for a user if they don't have one,
+/// persist the address, and return it. Failures are logged and the
+/// returned `None` is treated as "retry at booking time" — sign-in
+/// should not be blocked by a Privy outage.
+async fn ensure_privy_wallet(
+    user_id: Uuid,
+    privy_user_id: &str,
+    wallet: &WalletClient,
+    pool: &PgPool,
+) -> Option<String> {
+    if let Ok(Some(addr)) = sqlx::query_scalar::<_, String>(
+        "SELECT address FROM wallets WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    {
+        return Some(addr);
+    }
+    match wallet.create_wallet(privy_user_id).await {
+        Ok(w) => {
+            let _ = sqlx::query(
+                r#"INSERT INTO wallets (user_id, address, chain, privy_wallet_id)
+                   VALUES ($1, $2, 'base', $3)
+                   ON CONFLICT (user_id) DO NOTHING"#,
+            )
+            .bind(user_id)
+            .bind(&w.address)
+            .bind(&w.privy_wallet_id)
+            .execute(pool)
+            .await;
+            Some(w.address)
+        }
+        Err(WalletError::NotConfigured) => {
+            log::warn!("Privy create_wallet skipped: not configured");
+            None
+        }
+        Err(e) => {
+            log::warn!("Privy create_wallet failed (will retry on booking): {e}");
+            None
+        }
+    }
 }

@@ -152,6 +152,7 @@ pub async fn sign_up(
                     .clone()
                     .unwrap_or_else(|| "Nigeria".to_string()),
             ),
+            kyc_tier: 0,
             created_at: now,
         },
     })

@@ -342,10 +342,16 @@ pub async fn update_booking_status(
                 return HttpResponse::Forbidden()
                     .json(serde_json::json!({"error": "Only the host can activate"}));
             }
+            // V1 used `confirmed` post-Paystack; V2 USDC pipeline lands
+            // bookings in `paid`. Both are the same logical state —
+            // money is in escrow, host can hand over the car.
             if booking.status != BookingStatus::Approved
                 && booking.status != BookingStatus::Confirmed
+                && booking.status != BookingStatus::Paid
             {
-                return HttpResponse::BadRequest().json(serde_json::json!({"error": "Booking must be approved or confirmed to activate"}));
+                return HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "Booking must be paid to activate"
+                }));
             }
             BookingStatus::Active
         }

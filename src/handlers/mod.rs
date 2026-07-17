@@ -2,6 +2,7 @@ pub mod admin;
 pub mod auth;
 pub mod auth_v2;
 pub mod bookings;
+pub mod bookings_v2;
 pub mod cars_v2;
 pub mod countries;
 pub mod kyc;

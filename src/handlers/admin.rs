@@ -700,7 +700,8 @@ pub async fn list_partner_listings(
             p.legal_full_name, p.contract_email, p.phone, p.identity_status,
             p.drivers_license_number, p.drivers_license_front_url,
             p.drivers_license_back_url, p.profile_photo_url,
-            u.full_name AS user_full_name, u.email AS user_email
+            u.full_name AS user_full_name, u.email AS user_email,
+            u.kyc_tier AS user_kyc_tier
         FROM partner_listings l
         JOIN partner_profiles p ON p.id = l.profile_id
         JOIN users u ON u.id = l.user_id
@@ -754,6 +755,7 @@ pub async fn list_partner_listings(
                         "user": {
                             "full_name": r.get::<String, _>("user_full_name"),
                             "email": r.get::<String, _>("user_email"),
+                            "kyc_tier": r.get::<i32, _>("user_kyc_tier"),
                         },
                     })
                 })

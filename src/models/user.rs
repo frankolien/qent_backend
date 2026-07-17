@@ -38,6 +38,7 @@ pub struct User {
     pub country: Option<String>,
     pub apple_id: Option<String>,
     pub google_id: Option<String>,
+    pub kyc_tier: i32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -79,6 +80,7 @@ pub struct UserPublic {
     pub wallet_balance: f64,
     pub is_active: bool,
     pub country: Option<String>,
+    pub kyc_tier: i32,
     pub created_at: NaiveDateTime,
 }
 
@@ -95,6 +97,7 @@ impl From<User> for UserPublic {
             wallet_balance: u.wallet_balance,
             is_active: u.is_active,
             country: u.country,
+            kyc_tier: u.kyc_tier,
             created_at: u.created_at,
         }
     }

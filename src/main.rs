@@ -9,6 +9,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
 mod handlers;
+mod jobs;
 mod middleware;
 mod models;
 mod openapi;
@@ -177,6 +178,10 @@ async fn main() -> std::io::Result<()> {
     // Start WebSocket connection manager
     let ws_manager = handlers::ws::WsManager::new().start();
 
+    // V2 §4.3 — fallback path for missed Alchemy webhooks. Idle if
+    // ALCHEMY_RPC_URL / ESCROW_WALLET_ADDRESS aren't set.
+    jobs::reconcile_chain_payments::spawn(pool.clone(), config.clone(), ws_manager.clone());
+
     // V2 clients — built once and shared. Both tolerate missing env
     // (the underlying methods return NotConfigured).
     let wallet_client = WalletClient::new(
@@ -341,13 +346,19 @@ async fn main() -> std::io::Result<()> {
                     // V2 webhooks — Alchemy (USDC receive) and Sumsub (KYC
                     // decision). Both verify HMAC signatures internally before
                     // doing any DB work (§4.3, §3.5).
-                    .route(
-                        "/webhooks/alchemy/usdc-receive",
-                        web::post().to(handlers::webhook_chain::usdc_receive),
+                    // Alchemy + Sumsub bodies can each be a few MB
+                    // (Alchemy batches every transfer matching the
+                    // address filter per fire). Raise PayloadConfig
+                    // for both — default 256KB rejects them with 413.
+                    .service(
+                        web::resource("/webhooks/alchemy/usdc-receive")
+                            .app_data(web::PayloadConfig::new(10 * 1024 * 1024))
+                            .route(web::post().to(handlers::webhook_chain::usdc_receive)),
                     )
-                    .route(
-                        "/webhooks/sumsub",
-                        web::post().to(handlers::webhook_sumsub::decision),
+                    .service(
+                        web::resource("/webhooks/sumsub")
+                            .app_data(web::PayloadConfig::new(10 * 1024 * 1024))
+                            .route(web::post().to(handlers::webhook_sumsub::decision)),
                     )
                     // Authenticated routes
                     .service(
@@ -396,6 +407,18 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/bookings",
                                 web::post().to(handlers::bookings::create_booking),
+                            )
+                            // V2 USDC payment intent for V1's
+                            // approved bookings — preserves V1 UX
+                            // (book → host approve → renter pays)
+                            // while swapping Paystack for USDC.
+                            .route(
+                                "/v2/bookings/{id}/pay",
+                                web::post().to(handlers::bookings_v2::request_payment_intent),
+                            )
+                            .route(
+                                "/v2/payments/{id}/submit-tx",
+                                web::post().to(handlers::bookings_v2::submit_tx),
                             )
                             .route(
                                 "/bookings/mine",
@@ -551,10 +574,6 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/partner/listings/{id}/owner-consent",
                                 web::post().to(handlers::partner_v2::submit_owner_consent),
-                            )
-                            .route(
-                                "/partner/identity/scan",
-                                web::post().to(handlers::partner_v2::submit_identity_scan),
                             )
                             .route(
                                 "/partner/listings/{id}/pricing",

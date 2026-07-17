@@ -62,9 +62,9 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> HttpRespo
 
 /// POST /api/partner/profile — Upsert the identity profile (step 02). The
 /// host can come back to this screen and edit answers as long as we
-/// haven't already verified them; once `identity_status = 'verified'`,
-/// further self-service edits are blocked (they'd be a fraud vector —
-/// silently swapping the legal name on a verified host).
+/// haven't already verified them; once `users.kyc_tier >= 1` (Sumsub
+/// has signed off), further self-service edits are blocked — they'd be
+/// a fraud vector (silently swapping the legal name on a verified host).
 #[utoipa::path(
     post,
     path = "/api/partner/profile",
@@ -98,16 +98,15 @@ pub async fn upsert_profile(
     // Lock out edits on already-verified profiles. Anything that needs
     // changing post-verification has to go through admin support so
     // the audit trail is preserved.
-    let existing_status = sqlx::query_scalar::<_, String>(
-        "SELECT identity_status FROM partner_profiles WHERE user_id = $1",
+    let kyc_tier: i32 = sqlx::query_scalar::<_, i32>(
+        "SELECT kyc_tier FROM users WHERE id = $1",
     )
     .bind(claims.sub)
-    .fetch_optional(pool.get_ref())
+    .fetch_one(pool.get_ref())
     .await
-    .ok()
-    .flatten();
+    .unwrap_or(0);
 
-    if existing_status.as_deref() == Some("verified") {
+    if kyc_tier >= 1 {
         return HttpResponse::Conflict().json(serde_json::json!({
             "error": "Profile already verified — contact support to change identity details"
         }));
@@ -488,11 +487,10 @@ pub async fn update_listing_photos(
 }
 
 /// POST /api/partner/listings/{id}/docs — submit the document slice
-/// (Step 05). Stores the URLs the host uploaded, runs Prembly DL +
-/// plate verifications synchronously, and persists the structured
-/// responses for audit. Insurance NIID isn't enabled on unverified
-/// Prembly accounts, so we stash the certificate URL + policy number
-/// without a live lookup for now.
+/// (Step 05). Stores the vehicle URLs the host uploaded and runs
+/// Prembly's plate cross-check synchronously. Driver identity is
+/// verified out-of-band via Sumsub; this handler enforces a tier-1
+/// gate so the host can't finish onboarding without it.
 ///
 /// Owner-mismatch is self-declared: the FRSC plate endpoint doesn't
 /// expose the registered owner's name, so the client sends an
@@ -518,6 +516,28 @@ pub async fn submit_listing_docs(
 
     let listing_id = path.into_inner();
 
+    // Sumsub identity gate — host must have completed the renter-style
+    // KYC flow (tier ≥ 1) before they can submit vehicle docs.
+    let kyc_tier: i32 = match sqlx::query_scalar::<_, i32>(
+        "SELECT kyc_tier FROM users WHERE id = $1",
+    )
+    .bind(claims.sub)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": e.to_string()}))
+        }
+    };
+    if kyc_tier < 1 {
+        return HttpResponse::PreconditionFailed().json(serde_json::json!({
+            "error": "verify_identity_required",
+            "message": "Verify your identity with Sumsub before submitting documents."
+        }));
+    }
+
     // Ownership + status guard. Only mutate draft listings owned by
     // the caller — once submitted/approved, doc fields are locked.
     let listing_row = sqlx::query_as::<_, (Uuid, String, String, Uuid)>(
@@ -527,7 +547,7 @@ pub async fn submit_listing_docs(
     .bind(listing_id)
     .fetch_optional(pool.get_ref())
     .await;
-    let (owner, status, plate_number, profile_id) = match listing_row {
+    let (owner, status, plate_number, _profile_id) = match listing_row {
         Ok(Some(t)) => t,
         Ok(None) => {
             return HttpResponse::NotFound()
@@ -548,78 +568,10 @@ pub async fn submit_listing_docs(
         }));
     }
 
-    // Pull the profile so we know the host's full name + DL number to
-    // forward to Prembly's DL verification.
-    let profile = sqlx::query_as::<_, PartnerProfile>(
-        "SELECT * FROM partner_profiles WHERE id = $1",
-    )
-    .bind(profile_id)
-    .fetch_one(pool.get_ref())
-    .await;
-    let profile = match profile {
-        Ok(p) => p,
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": e.to_string()}))
-        }
-    };
-
     let prembly = PremblyClient::new(
         config.prembly_secret_key.clone(),
         config.prembly_base_url.clone(),
     );
-
-    // ─── DL verification ────────────────────────────────────────────────
-    // Use the DOB the host typed on this screen if present; otherwise
-    // fall back to whatever's already on the profile (rare — they
-    // probably came back later to upload the licence images).
-    let dl_dob = body
-        .drivers_license_dob
-        .or(profile.drivers_license_dob);
-    let mut dl_verified = profile.drivers_license_frsc_verified;
-    let mut dl_response: Option<serde_json::Value> = None;
-    if prembly.is_configured() {
-        if let Some(dob) = dl_dob {
-            let (first, last) = split_full_name(&profile.legal_full_name);
-            match prembly
-                .verify_drivers_license(
-                    &first,
-                    &last,
-                    &profile.drivers_license_number,
-                    dob,
-                )
-                .await
-            {
-                Ok(out) => {
-                    dl_verified = out.verified;
-                    dl_response = Some(out.raw);
-                }
-                Err(e) => {
-                    log::warn!("Prembly DL verify failed: {}", e);
-                    dl_response = Some(serde_json::json!({"error": e.to_string()}));
-                }
-            }
-        }
-    }
-
-    // Update the profile row with DL artefacts in one shot.
-    let _ = sqlx::query(
-        r#"UPDATE partner_profiles SET
-            drivers_license_front_url = COALESCE($2, drivers_license_front_url),
-            drivers_license_back_url  = COALESCE($3, drivers_license_back_url),
-            drivers_license_dob       = COALESCE($4, drivers_license_dob),
-            drivers_license_frsc_verified = $5,
-            drivers_license_frsc_response = COALESCE($6, drivers_license_frsc_response)
-           WHERE id = $1"#,
-    )
-    .bind(profile.id)
-    .bind(&body.drivers_license_front_url)
-    .bind(&body.drivers_license_back_url)
-    .bind(dl_dob)
-    .bind(dl_verified)
-    .bind(dl_response.as_ref())
-    .execute(pool.get_ref())
-    .await;
 
     // ─── Plate verification ─────────────────────────────────────────────
     let mut plate_verified = false;
@@ -673,27 +625,11 @@ pub async fn submit_listing_docs(
     match result {
         Ok(listing) => HttpResponse::Ok().json(serde_json::json!({
             "listing": listing,
-            "drivers_license_verified": dl_verified,
             "vehicle_plate_verified": plate_verified,
             "owner_consent_required": !body.is_registered_owner,
         })),
         Err(e) => HttpResponse::InternalServerError()
             .json(serde_json::json!({"error": e.to_string()})),
-    }
-}
-
-/// Cheap "first / last" split on the host's legal name. Anything past
-/// the first whitespace is treated as the surname — Nigerian names
-/// often have multiple given names so taking the *first* token alone
-/// for first_name and the *rest* for last_name lines up with how FRSC
-/// records most matches.
-fn split_full_name(full: &str) -> (String, String) {
-    let trimmed = full.trim();
-    if let Some(idx) = trimmed.find(char::is_whitespace) {
-        let (first, rest) = trimmed.split_at(idx);
-        (first.trim().to_string(), rest.trim().to_string())
-    } else {
-        (trimmed.to_string(), trimmed.to_string())
     }
 }
 
@@ -783,90 +719,6 @@ pub async fn submit_owner_consent(
         Err(e) => HttpResponse::InternalServerError()
             .json(serde_json::json!({"error": e.to_string()})),
     }
-}
-
-/// POST /api/partner/identity/scan — Step 05 (Identity scan).
-///
-/// Stub for now. The real flow hands off to the Smile Identity SDK
-/// for liveness + face match against the DL photo, and the SDK calls
-/// us back with a job result. Until our Smile sandbox is approved we
-/// store the selfie URL the host uploaded and mark the profile
-/// `pending` so admin review can take it from there.
-///
-/// Schema fields are intentionally laid out the same as Smile's real
-/// callback (smile_job_id, smile_response JSONB) so the swap to live
-/// Smile is a one-method-body change, not a re-migration.
-#[utoipa::path(
-    post,
-    path = "/api/partner/identity/scan",
-    tag = "Partner v2",
-    security(("bearer_auth" = [])),
-    request_body = SubmitIdentityScanRequest,
-    responses(
-        (status = 200, description = "Profile updated; identity_status now pending"),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "No profile yet — run Step 01 first"),
-    ),
-)]
-pub async fn submit_identity_scan(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    body: web::Json<SubmitIdentityScanRequest>,
-) -> HttpResponse {
-    let claims = match req.extensions().get::<Claims>().cloned() {
-        Some(c) => c,
-        None => {
-            return HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Unauthorized"}))
-        }
-    };
-
-    // Stand-in payload that mirrors what we'll eventually persist
-    // from a real Smile callback. `mocked: true` is the giveaway when
-    // looking at audit rows later.
-    let mock_response = serde_json::json!({
-        "mocked": true,
-        "provider": "smile_identity",
-        "note": "Sandbox-pending. Recorded for admin review.",
-        "selfie_url": body.selfie_url,
-    });
-
-    let result = sqlx::query_as::<_, PartnerProfile>(
-        r#"UPDATE partner_profiles SET
-            selfie_url = $2,
-            liveness_passed = true,
-            face_match_score = 92.5,
-            smile_response = $3,
-            identity_status = CASE
-                WHEN identity_status IN ('verified') THEN identity_status
-                ELSE 'pending'
-            END
-           WHERE user_id = $1
-           RETURNING *"#,
-    )
-    .bind(claims.sub)
-    .bind(&body.selfie_url)
-    .bind(&mock_response)
-    .fetch_optional(pool.get_ref())
-    .await;
-
-    match result {
-        Ok(Some(profile)) => HttpResponse::Ok().json(serde_json::json!({
-            "profile": profile,
-            "verified": true, // mock — flip to real Smile decision later
-            "score": 92.5,
-        })),
-        Ok(None) => HttpResponse::NotFound()
-            .json(serde_json::json!({"error": "Run the Owner step first"})),
-        Err(e) => HttpResponse::InternalServerError()
-            .json(serde_json::json!({"error": e.to_string()})),
-    }
-}
-
-#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
-pub struct SubmitIdentityScanRequest {
-    /// Cloudinary URL of the selfie the host took on the Identity step.
-    pub selfie_url: String,
 }
 
 /// POST /api/partner/listings/{id}/pricing — capture price + location before submit.
@@ -1051,10 +903,20 @@ pub async fn submit_listing(
                 .json(serde_json::json!({"error": e.to_string()}))
         }
     };
-    if profile.selfie_url.as_deref().unwrap_or_default().is_empty() {
+
+    // Identity is now Sumsub-gated via users.kyc_tier; the legacy
+    // selfie_url + face-match columns on partner_profiles are dead.
+    let kyc_tier: i32 = sqlx::query_scalar::<_, i32>(
+        "SELECT kyc_tier FROM users WHERE id = $1",
+    )
+    .bind(claims.sub)
+    .fetch_one(pool.get_ref())
+    .await
+    .unwrap_or(0);
+    if kyc_tier < 1 {
         return HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Take the identity selfie first",
-            "field": "selfie_url",
+            "error": "Verify your identity with Sumsub first",
+            "field": "kyc_tier",
         }));
     }
     if !profile.contract_email_verified {

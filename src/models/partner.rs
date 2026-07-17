@@ -322,21 +322,12 @@ pub struct UpdatePartnerListingPhotosRequest {
     pub photos: Vec<String>,
 }
 
-/// Step 05 — submit insurance + vehicle registration for verification.
-/// Triggers Prembly DL + plate calls server-side; result is stored on
-/// the profile / listing row. Insurance live-lookup is gated on a
-/// production Prembly account, so for now we just store the URL and
-/// policy number.
+/// Step 05 — submit insurance + vehicle registration. Driver identity
+/// is verified out-of-band via Sumsub (renter-style KYC launcher) and
+/// gated server-side by `users.kyc_tier >= 1`. Plate cross-check still
+/// runs synchronously via Prembly.
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct SubmitPartnerListingDocsRequest {
-    /// Cloudinary URL of the host's driver's licence (front).
-    pub drivers_license_front_url: Option<String>,
-    /// Cloudinary URL of the host's driver's licence (back).
-    pub drivers_license_back_url: Option<String>,
-    /// Date of birth as printed on the licence (YYYY-MM-DD). Required
-    /// by FRSC's verification payload.
-    pub drivers_license_dob: Option<chrono::NaiveDate>,
-
     pub vehicle_registration_url: Option<String>,
 
     pub insurance_certificate_url: Option<String>,
